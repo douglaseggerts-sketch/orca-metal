@@ -10,7 +10,7 @@ function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth
 const dbr=iso=>iso?iso.split('-').reverse().join('/'):'';
 
 let storageOK=true;
-function defSettings(){return{empresa:'Minha Serralheria',doc:'',fone:'',email:'',endereco:'',logo:null,margem:30,impostos:6,validade:10,pagamento:'50% na aprovação e 50% na entrega'}}
+function defSettings(){return{empresa:'Minha Serralheria',doc:'',fone:'',email:'',endereco:'',logo:null,servicos:['Galpão','Portão','Grade','Escada','Corrimão e guarda-corpo','Cobertura e telhado','Estrutura metálica','Mezanino','Tanque e reservatório','Tubulação','Caldeiraria sob medida','Manutenção e reparo','Outro'],margem:30,impostos:6,validade:10,pagamento:'50% na aprovação e 50% na entrega'}}
 function seed(){
   const mats=[
     {id:'m1',nome:'Chapa de aço 1020',un:'kg',preco:9.5},
@@ -22,7 +22,7 @@ function seed(){
     {id:'m7',nome:'Pintura esmalte sintético',un:'m2',preco:45},
     {id:'m8',nome:'Instalação no local',un:'h',preco:55}
   ];
-  const ex={id:uid(),num:'ORC-001',cliente:'Cliente de exemplo',fone:'',obra:'Portão basculante 3,00 x 2,20 m (exemplo)',data:today(),status:'rascunho',
+  const ex={id:uid(),num:'ORC-001',cliente:'Cliente de exemplo',fone:'',tipo:'Portão',obra:'Basculante 3,00 x 2,20 m (exemplo)',data:today(),status:'rascunho',
     itens:[
       {id:uid(),mat:'m2',desc:'Tubo metalon 30x30',un:'m',qtd:28,perda:8,preco:28},
       {id:uid(),mat:'m1',desc:'Chapa de aço 1020',un:'kg',qtd:42,perda:5,preco:9.5},
@@ -54,7 +54,7 @@ function vList(){
   <div class="stats"><div class="stat"><span>Enviados</span><b>${money(aberto)}</b></div><div class="stat"><span>Aprovados</span><b>${money(aprov)}</b></div></div>
   <div class="list">${bs.length?bs.map(b=>`<button class="bud" data-act="open" data-id="${b.id}">
     <span class="who">${esc(b.cliente||'Sem cliente')}</span><span class="val">${money(calc(b).total)}</span>
-    <span class="what">${esc(b.num)} · ${dbr(b.data)}${b.obra?' · '+esc(b.obra):''}</span><span class="pill ${b.status}">${ST[b.status]}</span></button>`).join(''):
+    <span class="what">${esc(b.num)} · ${dbr(b.data)}${[b.tipo,b.obra].filter(Boolean).map(x=>' · '+esc(x)).join('')}</span><span class="pill ${b.status}">${ST[b.status]}</span></button>`).join(''):
     '<div class="empty">Nenhum orçamento ainda. Toque em Novo para criar o primeiro.</div>'}</div>
   <button class="fab" data-act="new">+ Novo</button>`;
 }
@@ -63,6 +63,10 @@ function itemsHTML(b){
   return '<div class="list">'+b.itens.map((i,k)=>`<button class="item" data-act="item" data-i="${k}"><span class="d">${esc(i.desc||'Item sem nome')}</span>
     <span class="m">${qfmt(i.qtd)} ${UN[i.un].s} × ${money(i.preco)}${i.perda?' (+'+qfmt(i.perda)+'% perda)':''}</span><span class="t">${money(itTotal(i))}</span></button>`).join('')+'</div>';
 }
+function tipoOpts(b){
+  const l=(db.settings.servicos||[]).slice();if(b.tipo&&l.indexOf(b.tipo)<0)l.push(b.tipo);
+  return '<option value="">Selecione o tipo</option>'+l.map(x=>`<option value="${esc(x)}"${b.tipo===x?' selected':''}>${esc(x)}</option>`).join('');
+}
 function vEdit(){
   const b=cur();if(!b){view='list';return vList()}
   return `<div class="top"><button class="ghost" data-act="back">‹ Orçamentos</button><span class="num">${esc(b.num)}</span></div>
@@ -70,7 +74,8 @@ function vEdit(){
   <div class="card form">
     <label>Cliente<input id="f-cliente" data-b="cliente" value="${esc(b.cliente)}" autocomplete="off"></label>
     <label>Telefone<input id="f-fone" data-b="fone" inputmode="tel" value="${esc(b.fone)}"></label>
-    <label>Obra ou serviço<input id="f-obra" data-b="obra" value="${esc(b.obra)}" autocomplete="off"></label>
+    <label>Tipo de serviço<select id="f-tipo" data-b="tipo">${tipoOpts(b)}</select></label>
+    <label>Descrição da obra<input id="f-obra" data-b="obra" value="${esc(b.obra)}" autocomplete="off"></label>
     <div class="row2"><label>Data<input id="f-data" type="date" data-b="data" value="${esc(b.data)}"></label>
     <label>Situação<select id="f-status" data-b="status">${Object.keys(ST).map(k=>`<option value="${k}"${b.status===k?' selected':''}>${ST[k]}</option>`).join('')}</select></label></div>
   </div>
@@ -121,6 +126,11 @@ function vCfg(){
       <label>E-mail<input id="s-email" data-s="email" inputmode="email" value="${esc(s.email)}"></label>
     </div>
     <label>Endereço<textarea id="s-endereco" data-s="endereco">${esc(s.endereco)}</textarea></label>
+  </div>
+  <h2>Tipos de serviço</h2>
+  <div class="card form">
+    <label>Um tipo por linha<textarea id="s-servicos" data-s="servicos" data-lines style="min-height:150px">${esc((s.servicos||[]).join('\n'))}</textarea></label>
+    <p class="note">Esses tipos aparecem na lista Tipo de serviço de cada orçamento.</p>
   </div>
   <h2>Valores padrão</h2>
   <div class="card form">
@@ -238,7 +248,7 @@ function clientText(b){
   L.push('*ORÇAMENTO '+b.num+'*');
   L.push(s.empresa+(s.fone?' · '+s.fone:''));L.push('');
   if(b.cliente)L.push('Cliente: '+b.cliente);
-  if(b.obra)L.push('Serviço: '+b.obra);
+  if(b.tipo||b.obra)L.push('Serviço: '+[b.tipo,b.obra].filter(Boolean).join(' - '));
   L.push('Data: '+dbr(b.data));L.push('');
   b.itens.forEach((i,k)=>{L.push((k+1)+') '+i.desc+' ('+qfmt(i.qtd)+' '+UN[i.un].s+'): '+money(itTotal(i)*c.fator))});
   if(b.desconto){L.push('');L.push('Desconto: − '+money(b.desconto))}
@@ -259,7 +269,7 @@ const acts={
   tab(t){view=t.dataset.v;render();scrollTo(0,0)},
   new(){
     const s=db.settings;db.seq=(db.seq||0)+1;
-    const b={id:uid(),num:'ORC-'+String(db.seq).padStart(3,'0'),cliente:'',fone:'',obra:'',data:today(),status:'rascunho',itens:[],margem:s.margem,impostos:s.impostos,desconto:0,validade:s.validade,pagamento:s.pagamento,obs:''};
+    const b={id:uid(),num:'ORC-'+String(db.seq).padStart(3,'0'),cliente:'',fone:'',tipo:'',obra:'',data:today(),status:'rascunho',itens:[],margem:s.margem,impostos:s.impostos,desconto:0,validade:s.validade,pagamento:s.pagamento,obs:''};
     db.budgets.push(b);save();curId=b.id;view='edit';render();scrollTo(0,0);
   },
   open(t){curId=t.dataset.id;view='edit';render();scrollTo(0,0)},
@@ -331,7 +341,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
 document.addEventListener('input',e=>{
   const t=e.target;
   if(t.dataset.b){const b=cur();if(!b)return;b[t.dataset.b]=t.hasAttribute('data-n')?pn(t.value):t.value;save();if(t.hasAttribute('data-n'))updateTotals()}
-  else if(t.dataset.s){db.settings[t.dataset.s]=t.hasAttribute('data-n')?pn(t.value):t.value;save()}
+  else if(t.dataset.s){db.settings[t.dataset.s]=t.hasAttribute('data-lines')?t.value.split('\n').map(x=>x.trim()).filter(Boolean):t.hasAttribute('data-n')?pn(t.value):t.value;save()}
 });
 document.addEventListener('change',e=>{
   if(e.target.id!=='s-logo'||!e.target.files||!e.target.files[0])return;

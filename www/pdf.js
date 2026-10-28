@@ -146,7 +146,7 @@
     y += 16;
 
     /* Cliente */
-    var objLines = d.wrap(b.obra || '-', 10.5, false, CW - 24);
+    var objLines = d.wrap([b.tipo, b.obra].filter(Boolean).join(' - ') || '-', 10.5, false, CW - 24);
     var bh = 14 + 26 + 12 + objLines.length * 13 + 8;
     d.rect(M, y, CW, bh, LIGHT);
     d.text('CLIENTE', M + 12, y + 16, { size: 7.5, bold: true, color: GRAY });
