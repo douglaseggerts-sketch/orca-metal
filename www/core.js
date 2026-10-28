@@ -22,7 +22,16 @@
     var total = Math.max(0, bruto - (b.desconto || 0));
     return { sub: sub, mg: mg, base: base, imp: imp, bruto: bruto, total: total, fator: sub > 0 ? bruto / sub : 1 };
   }
-  var Core = { UN: UN, money: money, qfmt: qfmt, itTotal: itTotal, calc: calc };
+  function medidas(it) {
+    var p = [];
+    var d = [it.larg, it.alt, it.comp].filter(function (x) { return x > 0; }).map(function (x) { return QF.format(x); });
+    if (d.length) p.push(d.join(' x ') + ' m');
+    if (it.esp > 0) p.push('esp. ' + QF.format(it.esp) + ' mm');
+    if (it.diam > 0) p.push('diâm. ' + QF.format(it.diam) + ' mm');
+    if (it.pecas > 1) p.push(QF.format(it.pecas) + ' peças');
+    return p.join(', ');
+  }
+  var Core = { UN: UN, money: money, qfmt: qfmt, itTotal: itTotal, calc: calc, medidas: medidas };
   if (typeof module !== 'undefined' && module.exports) module.exports = Core;
   root.Core = Core;
 })(typeof window !== 'undefined' ? window : globalThis);

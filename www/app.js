@@ -10,31 +10,83 @@ function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth
 const dbr=iso=>iso?iso.split('-').reverse().join('/'):'';
 
 let storageOK=true;
-function defSettings(){return{empresa:'Minha Serralheria',doc:'',fone:'',email:'',endereco:'',logo:null,servicos:['Galpão','Portão','Grade','Escada','Corrimão e guarda-corpo','Cobertura e telhado','Estrutura metálica','Mezanino','Tanque e reservatório','Tubulação','Caldeiraria sob medida','Manutenção e reparo','Outro'],margem:30,impostos:6,validade:10,pagamento:'50% na aprovação e 50% na entrega'}}
+const CATS=['Chapas','Tubos e perfis','Barras e cantoneiras','Cobertura e telhas','Ferragens e acessórios','Tratamentos e acabamentos','Mão de obra','Serviços','Outros'];
+/* [id, categoria, nome, cobrado por, preço de exemplo em R$] */
+const CATALOG=[
+ ['m1','Chapas','Chapa de aço 1020','kg',9.5],
+ ['c1','Chapas','Chapa de aço A36 (caldeiraria)','kg',10],
+ ['c2','Chapas','Chapa galvanizada','kg',11],
+ ['c3','Chapas','Chapa xadrez','kg',10.5],
+ ['c4','Chapas','Chapa de inox 304','kg',38],
+ ['m2','Tubos e perfis','Tubo metalon 30x30','m',28],
+ ['c5','Tubos e perfis','Tubo metalon 50x30','m',38],
+ ['c6','Tubos e perfis','Tubo metalon 50x50','m',52],
+ ['c7','Tubos e perfis','Tubo redondo 2"','m',45],
+ ['c8','Tubos e perfis','Perfil U enrijecido','m',32],
+ ['c9','Tubos e perfis','Perfil I ou viga W','kg',11.5],
+ ['m3','Barras e cantoneiras','Cantoneira 1"','m',14],
+ ['c10','Barras e cantoneiras','Cantoneira 2"','m',32],
+ ['m4','Barras e cantoneiras','Barra chata 1"x1/8"','m',12],
+ ['c11','Barras e cantoneiras','Barra redonda 3/8"','m',9],
+ ['c12','Barras e cantoneiras','Barra quadrada 3/8"','m',11],
+ ['c13','Cobertura e telhas','Telha trapezoidal galvanizada','m2',62],
+ ['c14','Cobertura e telhas','Telha termoacústica','m2',140],
+ ['c15','Cobertura e telhas','Cumeeira','m',55],
+ ['c16','Cobertura e telhas','Calha galvanizada','m',48],
+ ['c17','Ferragens e acessórios','Dobradiça','un',18],
+ ['c18','Ferragens e acessórios','Fechadura para portão','un',95],
+ ['c19','Ferragens e acessórios','Roldana para portão de correr','un',45],
+ ['c20','Ferragens e acessórios','Trilho para portão','m',38],
+ ['c21','Ferragens e acessórios','Motor para portão automático','un',1250],
+ ['c22','Ferragens e acessórios','Parafuso e chumbador','un',4],
+ ['c23','Ferragens e acessórios','Arame ou eletrodo de solda','kg',28],
+ ['c24','Ferragens e acessórios','Disco de corte e desbaste','un',12],
+ ['c25','Ferragens e acessórios','Tela soldada ou alambrado','m2',55],
+ ['c26','Tratamentos e acabamentos','Fundo anticorrosivo (primer)','m2',18],
+ ['m7','Tratamentos e acabamentos','Pintura esmalte sintético','m2',45],
+ ['c27','Tratamentos e acabamentos','Pintura eletrostática (pó)','m2',55],
+ ['c28','Tratamentos e acabamentos','Pintura epóxi','m2',70],
+ ['c29','Tratamentos e acabamentos','Galvanização a fogo','kg',6.5],
+ ['c30','Tratamentos e acabamentos','Zincagem eletrolítica','kg',5],
+ ['c31','Tratamentos e acabamentos','Galvanização a frio (tinta rica em zinco)','m2',38],
+ ['c32','Tratamentos e acabamentos','Jateamento','m2',28],
+ ['m5','Mão de obra','Mão de obra: solda e montagem','h',65],
+ ['m6','Mão de obra','Mão de obra: corte e dobra','h',60],
+ ['c33','Mão de obra','Mão de obra: soldador qualificado','h',85],
+ ['c34','Mão de obra','Mão de obra: ajudante','h',35],
+ ['c35','Mão de obra','Mão de obra: pintura','h',45],
+ ['m8','Serviços','Instalação no local','h',55],
+ ['c36','Serviços','Frete e deslocamento','un',150],
+ ['c37','Serviços','Içamento com guindaste','h',350],
+ ['c38','Serviços','Projeto e ART','un',600]
+];
+const ACAB=['Fundo anticorrosivo (primer)','Pintura esmalte sintético','Pintura eletrostática (pó)','Pintura epóxi','Galvanização a fogo','Zincagem eletrolítica','Galvanização a frio','Material já galvanizado','Jateamento','Lixado e escovado','Polido (inox)'];
+const SERVICOS=['Galpão','Portão','Grade e proteção','Escada','Corrimão e guarda-corpo','Porta e janela','Cerca e alambrado','Cobertura e telhado','Estrutura metálica','Mezanino','Toldo e pergolado','Tanque e reservatório','Silo e funil','Chaminé e coifa','Tubulação industrial','Caldeiraria sob medida','Manutenção e reparo','Outro'];
+function migrate(d){
+  if((d.v||1)<2){
+    const byName={},have={};CATALOG.forEach(r=>byName[r[2].toLowerCase()]=r);
+    d.materials.forEach(m=>{const k=String(m.nome).toLowerCase(),r=byName[k];if(!m.cat)m.cat=r?r[1]:'Outros';have[k]=1});
+    CATALOG.forEach(r=>{if(!have[r[2].toLowerCase()])d.materials.push({id:r[0],nome:r[2],un:r[3],preco:r[4],cat:r[1]})});
+    d.v=2;
+  }
+  return d;
+}
+function defSettings(){return{empresa:'Minha Serralheria',doc:'',fone:'',email:'',endereco:'',logo:null,servicos:SERVICOS.slice(),acabamentos:ACAB.slice(),margem:30,impostos:6,validade:10,pagamento:'50% na aprovação e 50% na entrega'}}
 function seed(){
-  const mats=[
-    {id:'m1',nome:'Chapa de aço 1020',un:'kg',preco:9.5},
-    {id:'m2',nome:'Tubo metalon 30x30',un:'m',preco:28},
-    {id:'m3',nome:'Cantoneira 1"',un:'m',preco:14},
-    {id:'m4',nome:'Barra chata 1"x1/8"',un:'m',preco:12},
-    {id:'m5',nome:'Mão de obra: solda e montagem',un:'h',preco:65},
-    {id:'m6',nome:'Mão de obra: corte e dobra',un:'h',preco:60},
-    {id:'m7',nome:'Pintura esmalte sintético',un:'m2',preco:45},
-    {id:'m8',nome:'Instalação no local',un:'h',preco:55}
-  ];
+  const mats=CATALOG.map(r=>({id:r[0],nome:r[2],un:r[3],preco:r[4],cat:r[1]}));
   const ex={id:uid(),num:'ORC-001',cliente:'Cliente de exemplo',fone:'',tipo:'Portão',obra:'Basculante 3,00 x 2,20 m (exemplo)',data:today(),status:'rascunho',
     itens:[
       {id:uid(),mat:'m2',desc:'Tubo metalon 30x30',un:'m',qtd:28,perda:8,preco:28},
       {id:uid(),mat:'m1',desc:'Chapa de aço 1020',un:'kg',qtd:42,perda:5,preco:9.5},
       {id:uid(),mat:'m5',desc:'Mão de obra: solda e montagem',un:'h',qtd:14,perda:0,preco:65},
-      {id:uid(),mat:'m7',desc:'Pintura esmalte sintético',un:'m2',qtd:6.6,perda:0,preco:45},
+      {id:uid(),mat:'m7',desc:'Pintura esmalte sintético',un:'m2',qtd:6.6,perda:0,preco:45,larg:3,alt:2.2,pecas:1,acab:'Pintura esmalte sintético'},
       {id:uid(),mat:'m8',desc:'Instalação no local',un:'h',qtd:4,perda:0,preco:55}
     ],margem:30,impostos:6,desconto:0,validade:10,pagamento:'50% na aprovação e 50% na entrega',obs:''};
-  return{seq:1,settings:defSettings(),materials:mats,budgets:[ex]};
+  return{v:2,seq:1,settings:defSettings(),materials:mats,budgets:[ex]};
 }
 function load(){
   try{const t='__t';localStorage.setItem(t,'1');localStorage.removeItem(t)}catch(e){storageOK=false}
-  try{const r=localStorage.getItem(KEY);if(r){const d=JSON.parse(r);if(d&&Array.isArray(d.budgets)&&Array.isArray(d.materials)&&d.settings){d.settings=Object.assign(defSettings(),d.settings);return d}}}catch(e){}
+  try{const r=localStorage.getItem(KEY);if(r){const d=JSON.parse(r);if(d&&Array.isArray(d.budgets)&&Array.isArray(d.materials)&&d.settings){d.settings=Object.assign(defSettings(),d.settings);return migrate(d)}}}catch(e){}
   return seed();
 }
 let db=load();
@@ -60,9 +112,22 @@ function vList(){
 }
 function itemsHTML(b){
   if(!b.itens.length)return '<div class="empty">Nenhum item. Toque em + Item para adicionar material ou mão de obra.</div>';
-  return '<div class="list">'+b.itens.map((i,k)=>`<button class="item" data-act="item" data-i="${k}"><span class="d">${esc(i.desc||'Item sem nome')}</span>
-    <span class="m">${qfmt(i.qtd)} ${UN[i.un].s} × ${money(i.preco)}${i.perda?' (+'+qfmt(i.perda)+'% perda)':''}</span><span class="t">${money(itTotal(i))}</span></button>`).join('')+'</div>';
+  return '<div class="list">'+b.itens.map((i,k)=>{
+    const ex=[Core.medidas(i),i.acab].filter(Boolean).join(' · ');
+    return `<button class="item" data-act="item" data-i="${k}"><div class="dc"><span class="d">${esc(i.desc||'Item sem nome')}</span>
+    <span class="m">${qfmt(i.qtd)} ${UN[i.un].s} × ${money(i.preco)}${i.perda?' (+'+qfmt(i.perda)+'% perda)':''}</span>${ex?`<span class="m x">${esc(ex)}</span>`:''}</div><span class="t">${money(itTotal(i))}</span></button>`;
+  }).join('')+'</div>';
 }
+function matOpts(sel){
+  const g={};db.materials.forEach(m=>{const c=m.cat||'Outros';(g[c]=g[c]||[]).push(m)});
+  const order=CATS.concat(Object.keys(g).filter(c=>CATS.indexOf(c)<0));
+  return '<option value="">Avulso (digitar abaixo)</option>'+order.filter(c=>g[c]).map(c=>`<optgroup label="${esc(c)}">`+g[c].map(m=>`<option value="${m.id}"${sel===m.id?' selected':''}>${esc(m.nome)}</option>`).join('')+'</optgroup>').join('');
+}
+function acabOpts(it){
+  const l=(db.settings.acabamentos||[]).slice();if(it.acab&&l.indexOf(it.acab)<0)l.push(it.acab);
+  return '<option value="">Sem acabamento</option>'+l.map(x=>`<option value="${esc(x)}"${it.acab===x?' selected':''}>${esc(x)}</option>`).join('');
+}
+const fz=v=>v?fin(v):'';
 function tipoOpts(b){
   const l=(db.settings.servicos||[]).slice();if(b.tipo&&l.indexOf(b.tipo)<0)l.push(b.tipo);
   return '<option value="">Selecione o tipo</option>'+l.map(x=>`<option value="${esc(x)}"${b.tipo===x?' selected':''}>${esc(x)}</option>`).join('');
@@ -105,8 +170,10 @@ function vEdit(){
   <p class="note">O PDF e o texto para o cliente incluem margem e impostos nos valores de cada item, sem mostrar seus custos.</p>`;
 }
 function vMat(){
-  return `<div><h1>Materiais e serviços</h1><p class="sub">Tabela de preços usada para preencher os itens. Os valores abaixo são exemplos, ajuste aos seus.</p></div>
-  <div class="list">${db.materials.length?db.materials.map(m=>`<button class="item" data-act="mat" data-id="${m.id}"><span class="d">${esc(m.nome)}</span><span class="m">por ${UN[m.un].s}</span><span class="t">${money(m.preco)}</span></button>`).join(''):'<div class="empty">Nenhum material cadastrado.</div>'}</div>
+  const g={};db.materials.forEach(m=>{const c=m.cat||'Outros';(g[c]=g[c]||[]).push(m)});
+  const order=CATS.concat(Object.keys(g).filter(c=>CATS.indexOf(c)<0)).filter(c=>g[c]);
+  return `<div><h1>Materiais e serviços</h1><p class="sub">Tabela de preços usada para preencher os itens. Os valores são exemplos, ajuste aos seus.</p></div>
+  ${order.length?order.map(c=>`<div class="sec"><h2>${esc(c)}</h2></div><div class="list">${g[c].map(m=>`<button class="item" data-act="mat" data-id="${m.id}"><span class="d">${esc(m.nome)}</span><span class="m">por ${UN[m.un].s}</span><span class="t">${money(m.preco)}</span></button>`).join('')}</div>`).join(''):'<div class="empty">Nenhum material cadastrado.</div>'}
   <button class="fab" data-act="addmat">+ Novo</button>`;
 }
 function vCfg(){
@@ -131,6 +198,11 @@ function vCfg(){
   <div class="card form">
     <label>Um tipo por linha<textarea id="s-servicos" data-s="servicos" data-lines style="min-height:150px">${esc((s.servicos||[]).join('\n'))}</textarea></label>
     <p class="note">Esses tipos aparecem na lista Tipo de serviço de cada orçamento.</p>
+  </div>
+  <h2>Acabamentos</h2>
+  <div class="card form">
+    <label>Um acabamento por linha<textarea id="s-acabamentos" data-s="acabamentos" data-lines style="min-height:150px">${esc((s.acabamentos||[]).join('\n'))}</textarea></label>
+    <p class="note">Aparecem na lista Acabamento de cada item e saem no PDF, como pintura e galvanização.</p>
   </div>
   <h2>Valores padrão</h2>
   <div class="card form">
@@ -186,11 +258,28 @@ function toast(t){const o=document.createElement('div');o.className='toast';o.te
 function unitOpts(sel){return Object.keys(UN).map(k=>`<option value="${k}"${sel===k?' selected':''}>${UN[k].l}</option>`).join('')}
 
 function itemSheet(i){
-  const b=cur();const it=i>=0?b.itens[i]:{mat:'',desc:'',un:'kg',qtd:1,perda:0,preco:0};editIdx=i;
+  const b=cur();const it=i>=0?b.itens[i]:{mat:'',desc:'',un:'kg',qtd:1,perda:0,preco:0,larg:0,alt:0,comp:0,esp:0,diam:0,pecas:1,acab:''};editIdx=i;
   const o=sheet(`<h3>${i>=0?'Editar item':'Novo item'}</h3>
-  <label>Material ou serviço cadastrado<select id="it-mat"><option value="">Avulso (digitar abaixo)</option>${db.materials.map(m=>`<option value="${m.id}"${it.mat===m.id?' selected':''}>${esc(m.nome)}</option>`).join('')}</select></label>
+  <label>Material ou serviço cadastrado<select id="it-mat"><option value="">Avulso (digitar abaixo)</option>${matOpts(it.mat)}</select></label>
   <label>Descrição<input id="it-desc" value="${esc(it.desc)}" autocomplete="off"></label>
+  <label>Acabamento<select id="it-acab">${acabOpts(it)}</select></label>
   <label>Calcular por<select id="it-un">${unitOpts(it.un)}</select></label>
+  <details open><summary>Medidas do item</summary>
+    <div class="form">
+      <div class="row3">
+        <label>Largura (m)<input id="md-larg" inputmode="decimal" value="${fz(it.larg)}"></label>
+        <label>Altura (m)<input id="md-alt" inputmode="decimal" value="${fz(it.alt)}"></label>
+        <label>Compr. (m)<input id="md-comp" inputmode="decimal" value="${fz(it.comp)}"></label>
+      </div>
+      <div class="row3">
+        <label>Espessura (mm)<input id="md-esp" inputmode="decimal" value="${fz(it.esp)}"></label>
+        <label>Diâmetro (mm)<input id="md-diam" inputmode="decimal" value="${fz(it.diam)}"></label>
+        <label>Peças<input id="md-pecas" inputmode="numeric" value="${fin(it.pecas||1)}"></label>
+      </div>
+      <button class="btn alt" data-act="calcmed" type="button">Calcular quantidade pelas medidas</button>
+      <p class="note">Por m²: largura × altura × peças. Por metro: comprimento (ou largura, ou altura) × peças. Por unidade: número de peças. Por kg, use Calcular peso do aço.</p>
+    </div>
+  </details>
   <div class="row3">
     <label>Quantidade<input id="it-qtd" inputmode="decimal" value="${fin(it.qtd)}"></label>
     <label>Perda %<input id="it-perda" inputmode="decimal" value="${fin(it.perda)}"></label>
@@ -201,7 +290,7 @@ function itemSheet(i){
     <div class="form">
       <label>Peça<select id="pw-t"><option value="chapa">Chapa</option><option value="tubo">Tubo quadrado ou retangular</option></select></label>
       <div id="pw-chapa" class="row3">
-        <label>Comprimento (m)<input id="pw-c" inputmode="decimal"></label>
+        <label>Compr. (m)<input id="pw-c" inputmode="decimal"></label>
         <label>Largura (m)<input id="pw-l" inputmode="decimal"></label>
         <label>Espessura (mm)<input id="pw-e" inputmode="decimal"></label>
       </div>
@@ -209,7 +298,7 @@ function itemSheet(i){
         <label>Lado A (mm)<input id="pw-a" inputmode="decimal"></label>
         <label>Lado B (mm)<input id="pw-b" inputmode="decimal"></label>
         <label>Parede (mm)<input id="pw-te" inputmode="decimal"></label>
-        <label>Comprimento (m)<input id="pw-tc" inputmode="decimal"></label>
+        <label>Compr. (m)<input id="pw-tc" inputmode="decimal"></label>
       </div>
       <label>Quantidade de peças<input id="pw-n" inputmode="numeric" value="1"></label>
       <div>Peso total: <span class="res" id="pw-r">0 kg</span></div>
@@ -237,6 +326,7 @@ function matSheet(id){
   const m=id?db.materials.find(x=>x.id===id):{nome:'',un:'kg',preco:0};editMat=id||null;
   sheet(`<h3>${id?'Editar material':'Novo material ou serviço'}</h3>
   <label>Nome<input id="mt-nome" value="${esc(m.nome)}" autocomplete="off"></label>
+  <label>Categoria<select id="mt-cat">${CATS.map(c=>`<option value="${esc(c)}"${(m.cat||'Outros')===c?' selected':''}>${esc(c)}</option>`).join('')}</select></label>
   <label>Cobrado por<select id="mt-un">${unitOpts(m.un)}</select></label>
   <label>Preço por unidade (R$)<input id="mt-preco" inputmode="decimal" value="${fin(m.preco)}"></label>
   <div class="actions"><button class="btn" data-act="savemat">Salvar</button><button class="btn alt" data-act="close">Cancelar</button>
@@ -250,7 +340,7 @@ function clientText(b){
   if(b.cliente)L.push('Cliente: '+b.cliente);
   if(b.tipo||b.obra)L.push('Serviço: '+[b.tipo,b.obra].filter(Boolean).join(' - '));
   L.push('Data: '+dbr(b.data));L.push('');
-  b.itens.forEach((i,k)=>{L.push((k+1)+') '+i.desc+' ('+qfmt(i.qtd)+' '+UN[i.un].s+'): '+money(itTotal(i)*c.fator))});
+  b.itens.forEach((i,k)=>{L.push((k+1)+') '+i.desc+' ('+qfmt(i.qtd)+' '+UN[i.un].s+'): '+money(itTotal(i)*c.fator));const ex=[Core.medidas(i),i.acab].filter(Boolean).join(' · ');if(ex)L.push('     '+ex)});
   if(b.desconto){L.push('');L.push('Desconto: − '+money(b.desconto))}
   L.push('');L.push('*TOTAL: '+money(c.total)+'*');L.push('');
   if(b.pagamento)L.push('Pagamento: '+b.pagamento);
@@ -276,8 +366,18 @@ const acts={
   back(){view='list';render();scrollTo(0,0)},
   additem(){itemSheet(-1)},
   item(t){itemSheet(+t.dataset.i)},
+  calcmed(){
+    const g=id=>pn($(id).value),L=g('#md-larg'),A=g('#md-alt'),C=g('#md-comp'),n=g('#md-pecas')||1,un=$('#it-un').value;let q=0;
+    if(un==='m2')q=(L&&A?L*A:(C&&(L||A)?C*(L||A):0))*n;
+    else if(un==='m')q=(C||L||A)*n;
+    else if(un==='un')q=n;
+    else{toast(un==='kg'?'Para kg, use Calcular peso do aço':'Esse método não usa medidas');return}
+    q=Math.round(q*1000)/1000;
+    if(!q){toast('Preencha as medidas');return}
+    $('#it-qtd').value=fin(q);$('#it-qtd').dispatchEvent(new Event('input',{bubbles:true}));toast('Quantidade: '+qfmt(q)+' '+UN[un].s);
+  },
   saveitem(){
-    const b=cur();const it={mat:$('#it-mat').value,desc:$('#it-desc').value.trim(),un:$('#it-un').value,qtd:pn($('#it-qtd').value),perda:pn($('#it-perda').value),preco:pn($('#it-preco').value)};
+    const b=cur();const it={mat:$('#it-mat').value,desc:$('#it-desc').value.trim(),un:$('#it-un').value,qtd:pn($('#it-qtd').value),perda:pn($('#it-perda').value),preco:pn($('#it-preco').value),acab:$('#it-acab').value,larg:pn($('#md-larg').value),alt:pn($('#md-alt').value),comp:pn($('#md-comp').value),esp:pn($('#md-esp').value),diam:pn($('#md-diam').value),pecas:pn($('#md-pecas').value)||1};
     if(!it.desc){toast('Digite a descrição do item');return}
     if(editIdx>=0){it.id=b.itens[editIdx].id;b.itens[editIdx]=it}else{it.id=uid();b.itens.push(it)}
     save();closeSheet();$('#items').innerHTML=itemsHTML(b);updateTotals();
@@ -307,7 +407,7 @@ const acts={
   addmat(){matSheet(null)},
   savemat(){
     const nome=$('#mt-nome').value.trim();if(!nome){toast('Digite o nome');return}
-    const d={nome:nome,un:$('#mt-un').value,preco:pn($('#mt-preco').value)};
+    const d={nome:nome,cat:$('#mt-cat').value,un:$('#mt-un').value,preco:pn($('#mt-preco').value)};
     if(editMat){Object.assign(db.materials.find(x=>x.id===editMat),d)}else db.materials.push(Object.assign({id:uid()},d));
     save();closeSheet();render();
   },
@@ -333,7 +433,7 @@ const acts={
   backup(){textSheet('Backup dos dados',JSON.stringify(db),'Guarde este texto em lugar seguro. Para restaurar, cole em Ajustes.')},
   restore(){
     const v=$('#s-restore').value.trim();if(!v){toast('Cole o texto do backup primeiro');return}
-    try{const d=JSON.parse(v);if(!d||!Array.isArray(d.budgets)||!Array.isArray(d.materials)||!d.settings)throw 0;d.settings=Object.assign(defSettings(),d.settings);db=d;save();render();toast('Dados restaurados')}
+    try{const d=JSON.parse(v);if(!d||!Array.isArray(d.budgets)||!Array.isArray(d.materials)||!d.settings)throw 0;d.settings=Object.assign(defSettings(),d.settings);db=migrate(d);save();render();toast('Dados restaurados')}
     catch(e){toast('Backup inválido')}
   }
 };

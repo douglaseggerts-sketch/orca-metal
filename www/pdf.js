@@ -175,12 +175,16 @@
       d.text('Nenhum item neste orçamento.', cDesc, y + 16, { size: 9.5, color: GRAY }); y += 26;
     }
     b.itens.forEach(function (it, k) {
-      var lines = d.wrap(it.desc || '-', 9.5, false, wDesc), rh = lines.length * 12 + 10;
+      var lines = d.wrap(it.desc || '-', 9.5, false, wDesc);
+      var extra = [Core.medidas(it), it.acab].filter(Boolean).join('  ·  ');
+      var sub = extra ? d.wrap(extra, 8, false, wDesc) : [];
+      var rh = lines.length * 12 + sub.length * 10 + 10;
       if (y + rh > H - 56) { d.addPage(); y = M; head(); }
       if (k % 2 === 1) d.rect(M, y, CW, rh, ZEBRA);
       var tot = Core.itTotal(it) * c.fator, unit = it.qtd > 0 ? tot / it.qtd : 0, ty = y + 14;
       d.text(String(k + 1), M + 8, ty, { size: 9.5, color: GRAY });
       lines.forEach(function (t, j) { d.text(t, cDesc, ty + j * 12, { size: 9.5 }); });
+      sub.forEach(function (t, j) { d.text(t, cDesc, ty + lines.length * 12 - 1 + j * 10, { size: 8, color: GRAY }); });
       d.text(qfmt(it.qtd), cQtd, ty, { size: 9.5, align: 'right' });
       d.text(UN[it.un] ? UN[it.un].s : '', cUn, ty, { size: 9.5, color: GRAY });
       d.text(money(unit), cUnit, ty, { size: 9.5, align: 'right' });

@@ -90,3 +90,8 @@ details .form{margin-top:10px}
 
 .logo{display:flex;align-items:center;justify-content:center;background:#fff;border:1px dashed var(--line);border-radius:8px;min-height:84px;padding:8px}
 .logo img{max-width:100%;max-height:96px;display:block}
+
+.item .dc{display:flex;flex-direction:column;gap:2px;min-width:0}
+.item .dc+.t{grid-row:1}
+.item .m.x{font-family:var(--f-body);font-size:13px}
+optgroup{font-style:normal}
