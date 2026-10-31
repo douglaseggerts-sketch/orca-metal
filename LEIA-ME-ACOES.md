@@ -1,7 +1,9 @@
 # Monitor de Ações — Android e Windows
 
-Cotações (B3 e EUA), gráfico de candles com volume, médias móveis configuráveis (simples e exponencial)
-e alertas de compra/venda por preço-alvo ou cruzamento de médias. Dados do Yahoo Finance
+Cotações (B3 e EUA), gráfico de candles com volume (diário ou semanal), médias móveis configuráveis
+(padrão MM 9/21/50/80, como no Profit), IFR com média e linhas 70/30, alertas de compra/venda por
+preço-alvo, cruzamento de médias ou IFR, e carteira com listas, metas, rebalanceamento,
+evolução mensal e importação do Excel da Área do Investidor da B3. Dados do Yahoo Finance
 (B3 com atraso de ~15 min).
 
 ## Como gerar

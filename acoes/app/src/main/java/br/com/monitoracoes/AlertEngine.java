@@ -34,9 +34,10 @@ final class AlertEngine {
         final List<Double> fech = new ArrayList<>();
     }
 
-    static Serie baixar(String simbolo) throws Exception {
+    static Serie baixar(String simbolo, boolean semanal) throws Exception {
         String url = "https://query1.finance.yahoo.com/v8/finance/chart/"
-                + URLEncoder.encode(simbolo, "UTF-8") + "?range=2y&interval=1d";
+                + URLEncoder.encode(simbolo, "UTF-8")
+                + (semanal ? "?range=10y&interval=1wk" : "?range=2y&interval=1d");
         JSONObject j = new JSONObject(Http.get(url));
         JSONObject chart = j.getJSONObject("chart");
         JSONArray res = chart.optJSONArray("result");
@@ -98,6 +99,27 @@ final class AlertEngine {
         return soma / periodo;
     }
 
+    /** Último valor do IFR (RSI de Wilder). */
+    static double ifr(List<Double> v, int p) {
+        int n = v.size();
+        if (p < 2 || n <= p) {
+            return Double.NaN;
+        }
+        double g = 0, l = 0;
+        for (int i = 1; i <= p; i++) {
+            double d = v.get(i) - v.get(i - 1);
+            if (d > 0) g += d; else l -= d;
+        }
+        g /= p;
+        l /= p;
+        for (int i = p + 1; i < n; i++) {
+            double d = v.get(i) - v.get(i - 1);
+            g = (g * (p - 1) + Math.max(d, 0)) / p;
+            l = (l * (p - 1) + Math.max(-d, 0)) / p;
+        }
+        return l == 0 ? 100 : 100 - 100 / (1 + g / l);
+    }
+
     static String dinheiro(double v, String moeda) {
         NumberFormat f = NumberFormat.getCurrencyInstance(new Locale("pt", "BR"));
         try {
@@ -146,17 +168,26 @@ final class AlertEngine {
 
         for (Map.Entry<String, List<JSONObject>> e : porAtivo.entrySet()) {
             String sym = e.getKey();
-            Serie s;
-            try {
-                s = baixar(sym);
-            } catch (Exception ex) {
-                erros.add(rotulo(sym));
-                continue;
-            }
+            Map<String, Serie> cache = new HashMap<>();
             for (JSONObject a : e.getValue()) {
                 try {
                     String id = a.optString("id");
                     String tipo = a.optString("tipo");
+                    boolean semanal = "w".equals(a.optString("tf", "d"))
+                            && (tipo.startsWith("cruza") || tipo.startsWith("ifr"));
+                    String chave = semanal ? "w" : "d";
+                    Serie s = cache.get(chave);
+                    if (s == null) {
+                        try {
+                            s = baixar(sym, semanal);
+                        } catch (Exception ex) {
+                            if (!erros.contains(rotulo(sym))) erros.add(rotulo(sym));
+                            continue;
+                        }
+                        cache.put(chave, s);
+                    }
+                    String sufixo = tipo.startsWith("cruza") || tipo.startsWith("ifr")
+                            ? (semanal ? " (semanal)" : " (diário)") : "";
                     JSONObject m = new JSONObject();
                     String titulo = null;
                     String texto = null;
@@ -195,11 +226,27 @@ final class AlertEngine {
                             texto = "Preço " + dinheiro(s.preco, s.moeda) + ". " + nc + " = "
                                     + dinheiro(curta, s.moeda) + ", " + nl + " = " + dinheiro(longa, s.moeda) + ".";
                         }
+                    } else if ("ifr_abaixo".equals(tipo) || "ifr_acima".equals(tipo)) {
+                        double nivel = a.optDouble("valor", Double.NaN);
+                        int pi = a.optInt("ifrP", 9);
+                        double r = ifr(s.fech, pi);
+                        if (Double.isNaN(nivel) || Double.isNaN(r)) {
+                            continue;
+                        }
+                        boolean compra = "ifr_abaixo".equals(tipo);
+                        if (compra ? r <= nivel : r >= nivel) {
+                            titulo = (compra ? "🟢 COMPRA: " : "🔴 VENDA: ") + rotulo(sym) + " — IFR(" + pi + ") "
+                                    + String.format(new Locale("pt", "BR"), "%.1f", r)
+                                    + (compra ? " (sobrevendido)" : " (sobrecomprado)");
+                            texto = "Preço " + dinheiro(s.preco, s.moeda) + ". IFR " + (compra ? "≤ " : "≥ ")
+                                    + String.format(new Locale("pt", "BR"), "%.0f", nivel) + ".";
+                        }
                     } else {
                         continue;
                     }
 
                     if (titulo != null) {
+                        titulo = titulo + sufixo;
                         String nota = a.optString("nota", "");
                         if (!nota.isEmpty()) {
                             texto = texto + "\n" + nota;

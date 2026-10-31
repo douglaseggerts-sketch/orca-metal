@@ -56,7 +56,8 @@
   .periodos button { flex: 1; background: var(--card2); border: 1px solid var(--linha); color: var(--sub);
     border-radius: 8px; padding: 7px 0; font-size: 13px; font-weight: 600; }
   .periodos button.on { color: #fff; background: var(--ouro); border-color: var(--ouro); }
-  .grafico { position: relative; height: 330px; margin: 0 -6px; touch-action: pan-y; }
+  .grafico.comIFR { height: 440px; }
+  .grafico { position: relative; height: 340px; margin: 0 -6px; touch-action: pan-y; }
   .grafico canvas { width: 100%; height: 100%; display: block; }
   .info { min-height: 20px; font-size: 12px; color: var(--sub); font-variant-numeric: tabular-nums; margin: 4px 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
@@ -87,9 +88,14 @@
   @media (min-width: 760px) {
     main, header { max-width: 980px; margin: 0 auto; }
     header { border-bottom: 0; }
-    .grafico { height: 480px; }
-    nav { justify-content: center; } nav button { flex: 0 0 160px; }
+    .grafico { height: 480px; } .grafico.comIFR { height: 620px; }
+    nav { justify-content: center; } nav button { flex: 0 0 150px; }
   }
+  #folha { display: none; position: fixed; inset: 0; z-index: 20; }
+  #folha .fundo { position: absolute; inset: 0; background: rgba(0,0,0,.6); }
+  #folha .painel { position: absolute; left: 0; right: 0; bottom: 0; max-height: 88vh; overflow: auto; background: var(--card);
+    border-top: 1px solid var(--linha); border-radius: 16px 16px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
+  @media (min-width: 760px) { #folha .painel { left: 50%; right: auto; width: 520px; transform: translateX(-50%); bottom: auto; top: 10vh; border-radius: 16px; border: 1px solid var(--linha); } }
   input[type=color] { padding: 2px; height: 42px; width: 52px; flex: none; }
 </style>
 </head>
@@ -102,8 +108,9 @@
 <main id="tela"></main>
 <nav>
   <button data-v="lista" onclick="ir('lista')"><b>📈</b>Ações</button>
+  <button data-v="carteira" onclick="ir('carteira')"><b>💼</b>Carteira</button>
   <button data-v="alertas" onclick="ir('alertas')"><b>🔔</b>Alertas</button>
-  <button data-v="medias" onclick="ir('medias')"><b>〰️</b>Médias</button>
+  <button data-v="medias" onclick="ir('medias')"><b>〰️</b>Indicadores</button>
 </nav>
 <div class="toast" id="toast"></div>
 
@@ -129,17 +136,27 @@ function gravar(chave, v) { B.save(chave, JSON.stringify(v)); }
 function alertas() { try { return JSON.parse(B.alertas()); } catch (e) { return []; } }
 
 /* ===================== Estado ===================== */
-const CORES = ['#F5B942', '#4FC3F7', '#EF6C9C', '#B388FF', '#81C784', '#FF8A65'];
+const CORES = ['#00E5FF', '#3D7BFF', '#9E9E9E', '#F5F5F5', '#F5B942', '#EF6C9C', '#B388FF', '#81C784'];
+const MEDIAS_PADRAO = [
+  { p: 9, t: 'SMA', c: '#00E5FF', on: true },
+  { p: 21, t: 'SMA', c: '#3D7BFF', on: true },
+  { p: 50, t: 'SMA', c: '#9E9E9E', on: true },
+  { p: 80, t: 'SMA', c: '#F5F5F5', on: true }
+];
+// configuração no padrão do Profit (aplicada uma vez, também para quem já tinha o app)
+if (+ler('cfgVer', 0) < 2) {
+  gravar('medias', MEDIAS_PADRAO); gravar('tf', 'w'); gravar('periodo', '5A'); gravar('cfgVer', 2);
+}
 let lista = ler('lista', ['PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'AAPL', 'NVDA']);
-let medias = ler('medias', [
-  { p: 9, t: 'EMA', c: '#F5B942', on: true },
-  { p: 21, t: 'SMA', c: '#4FC3F7', on: true },
-  { p: 200, t: 'SMA', c: '#EF6C9C', on: false }
-]);
+let medias = ler('medias', MEDIAS_PADRAO);
+let ifrCfg = Object.assign({ p: 9, mm: 9, sup: 70, inf: 30, on: true }, ler('ifr', {}));
 const cotacoes = {};   // sym -> {preco, var, nome, moeda}
 const historico = {};  // sym -> {d: pts, w: pts, nome, moeda, preco}
-let view = 'lista', atual = null, periodo = ler('periodo', '6M'), modo = ler('modo', 'candle');
-const PERIODOS = { '1M': [22, 'd'], '3M': [66, 'd'], '6M': [126, 'd'], '1A': [252, 'd'], '5A': [260, 'w'] };
+let view = 'lista', atual = null, periodo = ler('periodo', '5A'), modo = ler('modo', 'candle'), tf = ler('tf', 'w');
+// anos exibidos (null = todo o histórico)
+const PERIODOS = { '3M': 0.25, '6M': 0.5, '1A': 1, '2A': 2, '5A': 5, 'Máx': null };
+if (!(periodo in PERIODOS)) periodo = '5A';
+const nomeTF = t => t === 'w' ? 'semanal' : 'diário';
 
 /* ===================== Utilidades ===================== */
 const $ = id => document.getElementById(id);
@@ -180,6 +197,30 @@ function ema(v, p) {
   return o;
 }
 const mm = (v, p, t) => t === 'EMA' ? ema(v, p) : sma(v, p);
+// IFR (RSI) de Wilder
+function ifr(v, p) {
+  const o = new Array(v.length).fill(null);
+  if (v.length <= p) return o;
+  let g = 0, l = 0;
+  for (let i = 1; i <= p; i++) { const d = v[i] - v[i - 1]; if (d > 0) g += d; else l -= d; }
+  g /= p; l /= p;
+  o[p] = l === 0 ? 100 : 100 - 100 / (1 + g / l);
+  for (let i = p + 1; i < v.length; i++) {
+    const d = v[i] - v[i - 1];
+    g = (g * (p - 1) + Math.max(d, 0)) / p; l = (l * (p - 1) + Math.max(-d, 0)) / p;
+    o[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l);
+  }
+  return o;
+}
+// média simples de uma série que começa com vazios
+function smaN(v, p) {
+  const i0 = v.findIndex(x => x != null);
+  const o = new Array(v.length).fill(null);
+  if (i0 < 0) return o;
+  const r = sma(v.slice(i0), p);
+  for (let i = 0; i < r.length; i++) o[i0 + i] = r[i];
+  return o;
+}
 
 /* ===================== Dados (Yahoo Finance) ===================== */
 const URL_Y = 'https://query1.finance.yahoo.com/v8/finance/chart/';
@@ -211,7 +252,7 @@ async function buscarCotacao(sym) {
 async function buscarHistorico(sym, f) {
   historico[sym] = historico[sym] || {};
   if (historico[sym][f]) return historico[sym];
-  const url = URL_Y + encodeURIComponent(sym) + (f === 'd' ? '?range=5y&interval=1d' : '?range=10y&interval=1wk');
+  const url = URL_Y + encodeURIComponent(sym) + (f === 'd' ? '?range=10y&interval=1d' : '?range=max&interval=1wk');
   const d = interpretar(await chamar('fetch', url));
   if (d.pts.length && d.preco != null) { const u = d.pts[d.pts.length - 1]; u.c = d.preco; u.h = Math.max(u.h, d.preco); u.l = Math.min(u.l, d.preco); }
   Object.assign(historico[sym], { [f]: d.pts, nome: d.nome, moeda: d.moeda, preco: d.preco });
@@ -224,21 +265,24 @@ function ir(v, sym) {
   if (v === 'detalhe') atual = sym;
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === (v === 'detalhe' ? 'lista' : v)));
   $('btVoltar').style.display = v === 'detalhe' ? '' : 'none';
-  $('btAtualizar').style.display = (v === 'lista' || v === 'detalhe' || v === 'alertas') ? '' : 'none';
+  $('btAtualizar').style.display = v === 'medias' ? 'none' : '';
+  fecharFolha();
   window.scrollTo(0, 0);
   render();
 }
-window.voltar = function () { if (view === 'detalhe') { ir('lista'); return true; } if (view !== 'lista') { ir('lista'); return true; } return false; };
-window.aoVoltarAoApp = function () { if (view === 'alertas') render(); else if (view === 'lista') atualizarLista(); };
+window.voltar = function () { if (fecharFolha()) return true; if (view === 'detalhe') { ir('lista'); return true; } if (view !== 'lista') { ir('lista'); return true; } return false; };
+window.aoVoltarAoApp = function () { if (view === 'alertas') render(); else if (view === 'carteira') atualizarCotacoesCarteira(); else if (view === 'lista') atualizarLista(); };
 function render() {
   if (view === 'lista') telaLista();
   else if (view === 'detalhe') telaDetalhe();
   else if (view === 'alertas') telaAlertas();
   else if (view === 'medias') telaMedias();
+  else if (view === 'carteira') { telaCarteira(); atualizarCotacoesCarteira(); }
 }
 function atualizar() {
   if (view === 'detalhe') { delete historico[atual]; telaDetalhe(); }
   else if (view === 'alertas') verificarAgora();
+  else if (view === 'carteira') { toast('Atualizando cotações…'); atualizarCotacoesCarteira(); }
   else atualizarLista();
 }
 
@@ -299,8 +343,10 @@ async function telaDetalhe() {
       <span id="dVar" class="${q && q.var >= 0 ? 'alta' : 'baixa'}">${q && q.var != null ? pct(q.var) + ' hoje' : ''}</span></div>
     <div class="sub" id="dNome">${q ? esc(q.nome) : ''} · ${mercado(s)}</div>
     <div class="periodos">${Object.keys(PERIODOS).map(p => `<button class="${p === periodo ? 'on' : ''}" onclick="mudarPeriodo('${p}')">${p}</button>`).join('')}</div>
-    <div class="linha" style="justify-content:space-between;align-items:flex-start"><div class="info" id="info" style="flex:1">${PC ? 'Passe o mouse no gráfico.' : 'Toque e arraste no gráfico.'}</div>
+    <div class="linha" style="justify-content:space-between">
+      <div class="modo"><button id="tD" class="${tf === 'd' ? 'on' : ''}" onclick="mudarTF('d')">Diário</button><button id="tW" class="${tf === 'w' ? 'on' : ''}" onclick="mudarTF('w')">Semanal</button></div>
       <div class="modo"><button id="mC" class="${modo === 'candle' ? 'on' : ''}" onclick="mudarModo('candle')">Candle</button><button id="mL" class="${modo === 'linha' ? 'on' : ''}" onclick="mudarModo('linha')">Linha</button></div></div>
+    <div class="info" id="info"></div>
     <div class="grafico" id="graf"><div class="carregando">Carregando…</div></div>
     <div class="chips" id="chips"></div>
     <div id="sinal"></div>
@@ -313,6 +359,8 @@ async function telaDetalhe() {
           <option value="acima">🔴 Vender quando o preço subir até…</option>
           <option value="cruza_cima">🟢 Compra: média curta cruzar p/ cima da longa</option>
           <option value="cruza_baixo">🔴 Venda: média curta cruzar p/ baixo da longa</option>
+          <option value="ifr_abaixo">🟢 Compra: IFR cair até… (sobrevendido)</option>
+          <option value="ifr_acima">🔴 Venda: IFR subir até… (sobrecomprado)</option>
         </select>
         <div id="fPreco"><input id="aValor" type="number" inputmode="decimal" step="0.01" placeholder="Preço alvo"></div>
         <div id="fMM" style="display:none" class="form">
@@ -321,8 +369,13 @@ async function telaDetalhe() {
             <input id="aLonga" type="number" inputmode="numeric" min="2" value="21" placeholder="Longa">
             <select id="aTipoMM"><option value="SMA">MM simples</option><option value="EMA">MM exponencial</option></select>
           </div>
-          <div class="sub">Períodos em dias. Use 1 na curta para “preço cruzar a média”.</div>
+          <div class="sub">Use 1 na curta para “preço cruzar a média”.</div>
         </div>
+        <div id="fIFR" style="display:none" class="linha">
+          <input id="aIfrNivel" type="number" inputmode="decimal" min="1" max="99" placeholder="Nível do IFR">
+          <input id="aIfrP" type="number" inputmode="numeric" min="2" value="${ifrCfg.p}" placeholder="Períodos do IFR">
+        </div>
+        <select id="aTF" style="display:none"><option value="w" ${tf === 'w' ? 'selected' : ''}>No gráfico semanal</option><option value="d" ${tf === 'd' ? 'selected' : ''}>No gráfico diário</option></select>
         <input id="aNota" placeholder="Anotação (opcional)">
         <button class="btn" onclick="criarAlerta()">Criar alerta</button>
       </div>
@@ -338,13 +391,19 @@ async function telaDetalhe() {
   }).catch(() => { });
   desenharDetalhe();
 }
+function mudarTF(t) {
+  tf = t; gravar('tf', t);
+  $('tD').classList.toggle('on', t === 'd'); $('tW').classList.toggle('on', t === 'w');
+  desenharDetalhe();
+}
 function mudarPeriodo(p) {
   periodo = p; gravar('periodo', p);
   document.querySelectorAll('.periodos button').forEach(b => b.classList.toggle('on', b.textContent === p));
   desenharDetalhe();
 }
 async function desenharDetalhe() {
-  const s = atual, [n, f] = PERIODOS[periodo];
+  const s = atual, f = tf, anos = PERIODOS[periodo];
+  const n = anos == null ? Infinity : Math.round(anos * (f === 'w' ? 52 : 252));
   let h;
   try { h = await buscarHistorico(s, f); }
   catch (e) { if (view === 'detalhe') $('graf').innerHTML = `<div class="carregando">Não consegui carregar o histórico.<br><span class="sub">${esc(e.message).slice(0, 120)}</span></div>`; return; }
@@ -352,13 +411,17 @@ async function desenharDetalhe() {
   const pts = h[f], v = pts.map(p => p.c);
   const series = medias.map(m => ({ m, val: mm(v, m.p, m.t) }));
   const ini = Math.max(0, pts.length - n);
-  grafico.dados = { pts: pts.slice(ini), series: series.filter(x => x.m.on).map(x => ({ m: x.m, val: x.val.slice(ini) })), moeda: h.moeda, f };
+  const rsi = ifr(v, ifrCfg.p), rsiMM = smaN(rsi, ifrCfg.mm);
+  grafico.dados = { pts: pts.slice(ini), series: series.filter(x => x.m.on).map(x => ({ m: x.m, val: x.val.slice(ini) })), moeda: h.moeda, f,
+    ifr: ifrCfg.on ? { val: rsi.slice(ini), mm: rsiMM.slice(ini) } : null };
+  $('graf').classList.toggle('comIFR', ifrCfg.on);
   grafico.toque = null;
   if (!$('graf').querySelector('canvas')) { $('graf').innerHTML = '<canvas id="cv"></canvas>'; ligarToque(); }
   grafico.desenhar();
   // chips
-  $('chips').innerHTML = medias.map((m, i) => `<span class="chip ${m.on ? 'on' : 'off'}" onclick="alternarMM(${i})"><i style="background:${m.c}"></i>${nomeMM(m)}${f === 'w' ? ' sem' : ''}</span>`).join('');
-  // sinal (sempre no diário)
+  $('chips').innerHTML = medias.map((m, i) => `<span class="chip ${m.on ? 'on' : 'off'}" onclick="alternarMM(${i})"><i style="background:${m.c}"></i>${nomeMM(m)}</span>`).join('') +
+    `<span class="chip ${ifrCfg.on ? 'on' : 'off'}" onclick="alternarIFR()"><i style="background:#F23645"></i>IFR(${ifrCfg.p})</span>`;
+  // sinal
   let txt = '';
   const ativas = series.filter(x => x.m.on && x.m.p > 1).sort((a, b) => a.m.p - b.m.p);
   const ultimo = v[v.length - 1];
@@ -373,11 +436,18 @@ async function desenharDetalhe() {
       const va = a.val[a.val.length - 1], vb = b.val[b.val.length - 1];
       if (va != null && vb != null) partes.push(`${nomeMM(a.m)} ${va > vb ? '<b class="alta">acima</b>' : '<b class="baixa">abaixo</b>'} da ${nomeMM(b.m)} → tendência de ${va > vb ? 'alta' : 'baixa'}`);
     }
-    txt = `<div class="sinal">${partes.join('<br>')}</div>`;
+    txt = partes.join('<br>');
   }
+  const rU = rsi[rsi.length - 1];
+  if (ifrCfg.on && rU != null) {
+    const est = rU >= ifrCfg.sup ? '<b class="baixa">sobrecomprado</b>' : rU <= ifrCfg.inf ? '<b class="alta">sobrevendido</b>' : 'neutro';
+    txt += (txt ? '<br>' : '') + `IFR(${ifrCfg.p}) ${num(rU, 1)} → ${est}`;
+  }
+  if (txt) txt = `<div class="sinal"><span class="sub">Gráfico ${nomeTF(f)}</span><br>${txt}</div>`;
   $('sinal').innerHTML = txt;
 }
 function mudarModo(m) { modo = m; gravar('modo', m); $('mC').classList.toggle('on', m === 'candle'); $('mL').classList.toggle('on', m === 'linha'); grafico.desenhar(); }
+function alternarIFR() { ifrCfg.on = !ifrCfg.on; gravar('ifr', ifrCfg); desenharDetalhe(); }
 function alternarMM(i) { medias[i].on = !medias[i].on; gravar('medias', medias); desenharDetalhe(); }
 
 /* --- gráfico em canvas --- */
@@ -388,9 +458,12 @@ const grafico = {
     const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
     cv.width = W * dpr; cv.height = H * dpr;
     const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
-    const { pts, series, f } = this.dados;
+    const { pts, series, f } = this.dados, R = this.dados.ifr;
     if (pts.length < 2) return;
     const padL = 6, padR = 58, padT = 10, padB = 22;
+    const util = H - padT - padB, ifrH = R ? util * 0.24 : 0, gap = R ? 14 : 0;
+    const baseP = H - padB - ifrH - gap;          // fundo da área de preço
+    const ifrTop = baseP + gap;
     let lo = Infinity, hi = -Infinity;
     pts.forEach(p => { lo = Math.min(lo, modo === 'candle' ? p.l : p.c); hi = Math.max(hi, modo === 'candle' ? p.h : p.c); });
     series.forEach(s => s.val.forEach(x => { if (x != null) { lo = Math.min(lo, x); hi = Math.max(hi, x); } }));
@@ -398,13 +471,13 @@ const grafico = {
     linhasAl.forEach(a => { lo = Math.min(lo, a.valor); hi = Math.max(hi, a.valor); });
     const marg = (hi - lo) * 0.06 || hi * 0.01 || 1; lo -= marg; hi += marg;
     const X = i => padL + (W - padL - padR) * i / (pts.length - 1);
-    const areaP = (H - padT - padB) * 0.84;
+    const areaP = (baseP - padT) * 0.84;
     const Y = v => padT + areaP * (1 - (v - lo) / (hi - lo));
     this.X = X; this.padL = padL; this.padR = padR; this.W = W;
     // grade
     g.font = '11px system-ui, sans-serif'; g.textBaseline = 'middle';
     const passo = niceStep((hi - lo) / 5);
-    for (let y = Math.ceil(lo / passo) * passo; y <= hi; y += passo) {
+    for (let y = Math.ceil(lo / passo) * passo; y <= hi && Y(y) <= baseP; y += passo) {
       g.strokeStyle = '#222933'; g.lineWidth = 1; g.beginPath(); g.moveTo(padL, Y(y)); g.lineTo(W - padR, Y(y)); g.stroke();
       g.fillStyle = '#6E7887'; g.fillText(num(y, passo < 1 ? 2 : 0), W - padR + 6, Y(y));
     }
@@ -426,14 +499,14 @@ const grafico = {
       g.fillStyle = cor; g.fillRect(W - padR + 2, Y(a.valor) - 8, padR - 2, 16);
       g.fillStyle = '#08090C'; g.textBaseline = 'middle'; g.fillText(num(a.valor), W - padR + 6, Y(a.valor));
     });
-    // volume (faixa de baixo)
-    const vH = (H - padT - padB) * 0.16, vMax = Math.max(...pts.map(p => p.v || 0)) || 1;
+    // volume (faixa de baixo da área de preço)
+    const vH = (baseP - padT) * 0.16, vMax = Math.max(...pts.map(p => p.v || 0)) || 1;
     const larg = Math.max(1, (W - padL - padR) / pts.length * 0.7);
     pts.forEach((p, i) => {
       if (!p.v) return;
       const h = vH * p.v / vMax;
       g.fillStyle = p.c >= p.o ? 'rgba(25,195,125,.28)' : 'rgba(242,54,69,.28)';
-      g.fillRect(X(i) - larg / 2, H - padB - h, larg, h);
+      g.fillRect(X(i) - larg / 2, baseP - h, larg, h);
     });
     const sobe = pts[pts.length - 1].c >= (pts.length > 1 ? pts[pts.length - 2].c : pts[0].c), corP = sobe ? '#19C37D' : '#F23645';
     if (modo === 'candle') {
@@ -448,7 +521,7 @@ const grafico = {
       const grad = g.createLinearGradient(0, padT, 0, H - padB);
       grad.addColorStop(0, 'rgba(47,123,255,.25)'); grad.addColorStop(1, 'rgba(47,123,255,0)');
       g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(X(i), Y(p.c)) : g.moveTo(X(i), Y(p.c)));
-      g.lineTo(X(pts.length - 1), H - padB); g.lineTo(X(0), H - padB); g.closePath(); g.fillStyle = grad; g.fill();
+      g.lineTo(X(pts.length - 1), baseP); g.lineTo(X(0), baseP); g.closePath(); g.fillStyle = grad; g.fill();
       g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(X(i), Y(p.c)) : g.moveTo(X(i), Y(p.c)));
       g.strokeStyle = '#2F7BFF'; g.lineWidth = 2; g.lineJoin = 'round'; g.stroke();
     }
@@ -462,15 +535,41 @@ const grafico = {
     const ult = pts[pts.length - 1].c;
     g.fillStyle = corP; g.fillRect(W - padR + 2, Y(ult) - 9, padR - 2, 18);
     g.fillStyle = '#08090C'; g.font = 'bold 11px system-ui, sans-serif'; g.textBaseline = 'middle'; g.fillText(num(ult), W - padR + 6, Y(ult));
-    // toque
+    // painel do IFR
+    if (R) {
+      const YI = v => ifrTop + ifrH * (1 - v / 100);
+      g.fillStyle = 'rgba(138,147,163,.07)'; g.fillRect(padL, YI(ifrCfg.sup), W - padL - padR, YI(ifrCfg.inf) - YI(ifrCfg.sup));
+      g.strokeStyle = '#2A313C'; g.lineWidth = 1; g.strokeRect(padL + .5, ifrTop + .5, W - padL - padR - 1, ifrH - 1);
+      g.setLineDash([4, 4]); g.strokeStyle = '#4A5361';
+      [ifrCfg.sup, ifrCfg.inf].forEach(n => { g.beginPath(); g.moveTo(padL, YI(n)); g.lineTo(W - padR, YI(n)); g.stroke(); });
+      g.setLineDash([]);
+      g.font = '11px system-ui, sans-serif'; g.textBaseline = 'middle'; g.fillStyle = '#6E7887';
+      [ifrCfg.sup, ifrCfg.inf].forEach(n => g.fillText(num(n, 0), W - padR + 6, YI(n)));
+      const linha = (arr, cor, lw) => {
+        g.beginPath(); let on = false;
+        arr.forEach((x, i) => { if (x == null) { on = false; return; } on ? g.lineTo(X(i), YI(x)) : g.moveTo(X(i), YI(x)); on = true; });
+        g.strokeStyle = cor; g.lineWidth = lw; g.stroke();
+      };
+      linha(R.mm, '#00E5FF', 1.2);
+      linha(R.val, '#F23645', 1.6);
+      const ru = R.val[R.val.length - 1];
+      if (ru != null) {
+        g.fillStyle = '#F23645'; g.fillRect(W - padR + 2, YI(ru) - 8, padR - 2, 16);
+        g.fillStyle = '#fff'; g.font = 'bold 11px system-ui, sans-serif'; g.fillText(num(ru), W - padR + 6, YI(ru));
+      }
+      g.font = '11px system-ui, sans-serif'; g.fillStyle = '#8A93A3'; g.textBaseline = 'top';
+      g.fillText(`IFR (${ifrCfg.p})  ·  MM ${ifrCfg.mm}`, padL + 6, ifrTop + 4);
+    }
+    // toque / legenda (sem toque mostra o último candle, como no Profit)
+    const i = this.toque != null ? this.toque : pts.length - 1, p = pts[i];
     if (this.toque != null) {
-      const i = this.toque, p = pts[i];
       g.strokeStyle = '#8B95A5'; g.lineWidth = 1; g.setLineDash([3, 3]);
       g.beginPath(); g.moveTo(X(i), padT); g.lineTo(X(i), H - padB); g.stroke(); g.setLineDash([]);
       g.fillStyle = '#E6EAF0'; g.beginPath(); g.arc(X(i), Y(p.c), 4, 0, 7); g.fill();
-      $('info').innerHTML = `<b style="color:var(--txt)">${dataBR(p.t)}</b> A ${num(p.o)} M ${num(p.h)} m ${num(p.l)} F <b style="color:${p.c >= p.o ? 'var(--alta)' : 'var(--baixa)'}">${num(p.c)}</b><br>` +
-        series.map(s => s.val[i] != null ? ` <span style="color:${s.m.c}">${nomeMM(s.m)} ${num(s.val[i])}</span>` : '').join('');
     }
+    $('info').innerHTML = `<b style="color:var(--txt)">${dataBR(p.t)}</b> A ${num(p.o)} M ${num(p.h)} m ${num(p.l)} F <b style="color:${p.c >= p.o ? 'var(--alta)' : 'var(--baixa)'}">${num(p.c)}</b><br>` +
+      series.map(s => s.val[i] != null ? `<span style="color:${s.m.c}">${nomeMM(s.m)} ${num(s.val[i])}</span>` : '').join(' ') +
+      (R && R.val[i] != null ? ` <span style="color:#F23645">IFR ${num(R.val[i], 1)}</span>` : '');
   }
 };
 function niceStep(x) { const e = Math.pow(10, Math.floor(Math.log10(x))), f = x / e; return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * e; }
@@ -492,19 +591,25 @@ window.addEventListener('resize', () => view === 'detalhe' && grafico.desenhar()
 
 /* --- alertas do ativo --- */
 function ajustarForm() {
-  const t = $('aTipo').value, mmT = t.startsWith('cruza');
-  $('fPreco').style.display = mmT ? 'none' : '';
+  const t = $('aTipo').value, mmT = t.startsWith('cruza'), iT = t.startsWith('ifr');
+  $('fPreco').style.display = mmT || iT ? 'none' : '';
   $('fMM').style.display = mmT ? '' : 'none';
+  $('fIFR').style.display = iT ? '' : 'none';
+  $('aTF').style.display = mmT || iT ? '' : 'none';
+  if (iT && !$('aIfrNivel').value) $('aIfrNivel').value = t === 'ifr_abaixo' ? ifrCfg.inf : ifrCfg.sup;
 }
 function descreverAlerta(a, moeda) {
   if (a.tipo === 'abaixo') return `Comprar se preço ≤ <b>${dinheiro(a.valor, moeda)}</b>`;
   if (a.tipo === 'acima') return `Vender se preço ≥ <b>${dinheiro(a.valor, moeda)}</b>`;
+  const tfx = ` <span class="sub">(${nomeTF(a.tf || 'd')})</span>`;
+  if (a.tipo === 'ifr_abaixo') return `Compra: <b>IFR(${a.ifrP || 9})</b> ≤ <b>${num(a.valor, 0)}</b>` + tfx;
+  if (a.tipo === 'ifr_acima') return `Venda: <b>IFR(${a.ifrP || 9})</b> ≥ <b>${num(a.valor, 0)}</b>` + tfx;
   const c = nomeMM({ p: a.mmCurta, t: a.tipoMM }), l = nomeMM({ p: a.mmLonga, t: a.tipoMM });
-  return a.tipo === 'cruza_cima' ? `Compra: <b>${c}</b> cruzar p/ cima da <b>${l}</b>` : `Venda: <b>${c}</b> cruzar p/ baixo da <b>${l}</b>`;
+  return (a.tipo === 'cruza_cima' ? `Compra: <b>${c}</b> cruzar p/ cima da <b>${l}</b>` : `Venda: <b>${c}</b> cruzar p/ baixo da <b>${l}</b>`) + tfx;
 }
 function linhaAlerta(a, comAtivo) {
   const moeda = (cotacoes[a.sym] || {}).moeda || (a.sym.endsWith('.SA') ? 'BRL' : 'USD');
-  const compra = a.tipo === 'abaixo' || a.tipo === 'cruza_cima';
+  const compra = a.tipo === 'abaixo' || a.tipo === 'cruza_cima' || a.tipo === 'ifr_abaixo';
   const st = a.disparadoEm
     ? `<div class="sub">⚡ Disparou em ${new Date(a.disparadoEm).toLocaleString('pt-BR')} a ${dinheiro(a.precoDisparo, moeda)}</div>`
     : (a.ativo ? '' : '<div class="sub">Pausado</div>');
@@ -519,7 +624,12 @@ function listarAlertasAtivo() {
 }
 function criarAlerta() {
   const t = $('aTipo').value, a = { sym: atual, tipo: t, nota: $('aNota').value.trim() };
-  if (t.startsWith('cruza')) {
+  if (t.startsWith('cruza') || t.startsWith('ifr')) a.tf = $('aTF').value;
+  if (t.startsWith('ifr')) {
+    a.valor = parseFloat(String($('aIfrNivel').value).replace(',', '.'));
+    a.ifrP = parseInt($('aIfrP').value, 10) || ifrCfg.p;
+    if (!(a.valor > 0 && a.valor < 100)) { toast('Informe o nível do IFR (1 a 99).'); return; }
+  } else if (t.startsWith('cruza')) {
     a.mmCurta = parseInt($('aCurta').value, 10); a.mmLonga = parseInt($('aLonga').value, 10); a.tipoMM = $('aTipoMM').value;
     if (!(a.mmCurta >= 1) || !(a.mmLonga >= 2) || a.mmCurta >= a.mmLonga) { toast('A média curta deve ser menor que a longa.'); return; }
   } else {
@@ -530,7 +640,7 @@ function criarAlerta() {
       if (!confirm('O preço atual (' + num(q.preco) + ') já atende essa condição — o alerta vai disparar na próxima verificação. Criar mesmo assim?')) return;
   }
   B.addAlerta(JSON.stringify(a));
-  $('aValor').value = ''; $('aNota').value = '';
+  $('aValor').value = ''; $('aNota').value = ''; $('aIfrNivel').value = '';
   toast('Alerta criado');
   listarAlertasAtivo(); grafico.desenhar();
   if (!B.notificacoesLiberadas()) toast('Atenção: as notificações do app estão desligadas nas configurações do Android.');
@@ -560,7 +670,7 @@ async function verificarAgora() {
 
 /* ===================== Tela: médias ===================== */
 function telaMedias() {
-  $('titulo').textContent = 'Médias móveis';
+  $('titulo').textContent = 'Indicadores';
   let h = `<div class="card"><h2>Suas médias</h2>` + (medias.length ? medias.map((m, i) => `
     <div class="al"><span class="bola" style="background:${m.c}"></span>
       <div class="t"><b>${nomeMM(m)}</b> <span class="sub">· ${m.p} períodos · ${m.t === 'EMA' ? 'exponencial' : 'simples'}</span></div>
@@ -573,9 +683,28 @@ function telaMedias() {
         <input id="mC" type="color" value="${CORES[medias.length % CORES.length]}">
       </div>
       <button class="btn" onclick="addMedia()">Adicionar</button>
-      <div class="sub">Comuns: MME 9 e MM 21 (curto prazo), MM 50 (médio), MM 200 (longo). No período 5A o gráfico é semanal, então os períodos contam em semanas.</div>
-    </div></div>`;
+      <div class="sub">MM = média aritmética (a “Média Móvel A” do Profit). No gráfico semanal os períodos contam em semanas.</div>
+    </div></div>
+    <div class="card"><div class="linha" style="margin-bottom:10px"><h2 style="flex:1;margin:0">IFR (RSI)</h2>
+      <label class="sw"><input type="checkbox" ${ifrCfg.on ? 'checked' : ''} onchange="ifrCfg.on=this.checked;gravar('ifr',ifrCfg)"><span></span></label></div>
+      <div class="form">
+        <div class="linha"><label class="sub" style="flex:1">Períodos do IFR</label><input style="width:90px" type="number" min="2" max="100" value="${ifrCfg.p}" onchange="setIFR('p',this.value,2,100)"></div>
+        <div class="linha"><label class="sub" style="flex:1">Média do IFR</label><input style="width:90px" type="number" min="2" max="100" value="${ifrCfg.mm}" onchange="setIFR('mm',this.value,2,100)"></div>
+        <div class="linha"><label class="sub" style="flex:1">Sobrecomprado (linha de cima)</label><input style="width:90px" type="number" min="51" max="99" value="${ifrCfg.sup}" onchange="setIFR('sup',this.value,51,99)"></div>
+        <div class="linha"><label class="sub" style="flex:1">Sobrevendido (linha de baixo)</label><input style="width:90px" type="number" min="1" max="49" value="${ifrCfg.inf}" onchange="setIFR('inf',this.value,1,49)"></div>
+      </div></div>
+    <div style="text-align:center"><button class="btn sec peq" onclick="restaurarPadrao()">Voltar ao padrão (MM 9, 21, 50, 80 e IFR 9)</button></div>`;
   $('tela').innerHTML = h;
+}
+function setIFR(k, v, min, max) {
+  const n = parseInt(v, 10);
+  if (!(n >= min && n <= max)) { toast(`Use de ${min} a ${max}.`); telaMedias(); return; }
+  ifrCfg[k] = n; gravar('ifr', ifrCfg);
+}
+function restaurarPadrao() {
+  medias = JSON.parse(JSON.stringify(MEDIAS_PADRAO)); gravar('medias', medias);
+  ifrCfg = { p: 9, mm: 9, sup: 70, inf: 30, on: true }; gravar('ifr', ifrCfg);
+  telaMedias(); toast('Padrão restaurado');
 }
 function addMedia() {
   const p = parseInt($('mP').value, 10);
@@ -583,6 +712,473 @@ function addMedia() {
   medias.push({ p, t: $('mT').value, c: $('mC').value, on: true });
   medias.sort((a, b) => a.p - b.p);
   gravar('medias', medias); telaMedias(); toast(nomeMM({ p, t: $('mT').value }) + ' adicionada');
+}
+
+/* ===================== Carteira ===================== */
+const CART_PADRAO = {
+  cats: [
+    { id: 'caixa', nome: 'CAIXA', meta: 75, cor: '#4A86E8' },
+    { id: 'dy', nome: 'DY', meta: 5, cor: '#F1C232' },
+    { id: 'fii', nome: 'FII', meta: 5, cor: '#FFE599' },
+    { id: 'bdr', nome: 'BDR', meta: 14, cor: '#9FC5E8' },
+    { id: 'ouro', nome: 'OURO', meta: 1, cor: '#C27BA0' }
+  ],
+  itens: [],   // { id, cat, sym, qtd, pm, ult } ou { id, cat, nome, valor } (valor manual)
+  hist: []     // { m: '2026-11', t: total }
+};
+let cart = ler('carteira', null) || JSON.parse(JSON.stringify(CART_PADRAO));
+let cartAberta = ler('cartAberta', {});
+let aporteSim = '';
+const salvarCart = () => gravar('carteira', cart);
+const novoId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const catDe = id => cart.cats.find(c => c.id === id);
+
+function precoItem(it) {
+  if (!it.sym) return null;
+  const q = cotacoes[it.sym];
+  return q && q.preco != null ? q.preco : (it.ult != null ? it.ult : null);
+}
+function valorItem(it) {
+  if (!it.sym) return +it.valor || 0;
+  const p = precoItem(it);
+  return p == null ? 0 : p * (+it.qtd || 0);
+}
+function resumoCarteira() {
+  const porCat = {};
+  cart.cats.forEach(c => porCat[c.id] = 0);
+  let total = 0, custo = 0, valorComCusto = 0;
+  cart.itens.forEach(it => {
+    const v = valorItem(it);
+    if (porCat[it.cat] == null) porCat[it.cat] = 0;
+    porCat[it.cat] += v; total += v;
+    if (it.sym && it.pm > 0 && it.qtd > 0) { custo += it.pm * it.qtd; valorComCusto += v; }
+  });
+  return { porCat, total, custo, valorComCusto };
+}
+
+async function atualizarCotacoesCarteira() {
+  const syms = [...new Set(cart.itens.filter(i => i.sym).map(i => i.sym))];
+  await Promise.all(syms.map(s => buscarCotacao(s).catch(() => { })));
+  let mudou = false;
+  cart.itens.forEach(it => { if (it.sym && cotacoes[it.sym] && cotacoes[it.sym].preco != null) { it.ult = cotacoes[it.sym].preco; mudou = true; } });
+  if (mudou) { registrarMes(); salvarCart(); }
+  if (view === 'carteira') telaCarteira();
+}
+function mesAtual() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+function registrarMes() {
+  const t = resumoCarteira().total;
+  if (!(t > 0)) return;
+  const m = mesAtual(), h = cart.hist.find(x => x.m === m);
+  if (h) h.t = t; else { cart.hist.push({ m, t }); cart.hist.sort((a, b) => a.m < b.m ? -1 : 1); }
+}
+const nomeMes = m => { const [a, b] = m.split('-'); return b + '/' + a.slice(2); };
+
+function telaCarteira() {
+  $('titulo').textContent = 'Carteira';
+  const { porCat, total, custo, valorComCusto } = resumoCarteira();
+  const somaMetas = cart.cats.reduce((s, c) => s + (+c.meta || 0), 0);
+  let h = `<div class="card"><div class="sub">Patrimônio total</div>
+    <div class="topo"><span class="grande">${dinheiro(total)}</span>
+    ${custo > 0 ? `<span class="${valorComCusto >= custo ? 'alta' : 'baixa'}">${pct((valorComCusto / custo - 1) * 100)} sobre o preço médio</span>` : ''}</div>
+    <div class="linha" style="margin-top:12px;flex-wrap:wrap">
+      <button class="btn peq" onclick="formItem()">+ Ativo</button>
+      <button class="btn sec peq" onclick="importarB3()">Importar da B3</button>
+      <button class="btn sec peq" onclick="editarListas()">Listas e metas</button>
+    </div>
+    <input type="file" id="arqB3" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" style="display:none" onchange="lerArquivoB3(this)"></div>`;
+  if (Math.abs(somaMetas - 100) > 0.01) h += `<div class="aviso">As metas das listas somam ${num(somaMetas, 1)}% (o certo é 100%). Ajuste em “Listas e metas”.</div>`;
+
+  // distribuição × meta
+  h += `<div class="card"><h2>Distribuição × meta</h2>`;
+  const maxPct = Math.max(1, ...cart.cats.map(c => Math.max(+c.meta || 0, total ? porCat[c.id] / total * 100 : 0)));
+  h += cart.cats.map(c => {
+    const at = total ? porCat[c.id] / total * 100 : 0, alvo = total * (+c.meta || 0) / 100, dif = alvo - porCat[c.id];
+    return `<div style="margin:10px 0 14px">
+      <div class="linha"><span class="bola" style="background:${c.cor}"></span><b style="flex:1">${esc(c.nome)}</b><span>${dinheiro(porCat[c.id])}</span></div>
+      <div style="position:relative;height:12px;background:var(--card2);border-radius:6px;margin:6px 0 4px">
+        <div style="position:absolute;left:0;top:0;bottom:0;width:${at / maxPct * 100}%;background:${c.cor};border-radius:6px"></div>
+        <div title="meta" style="position:absolute;top:-3px;bottom:-3px;width:2px;left:calc(${(+c.meta || 0) / maxPct * 100}% - 1px);background:#fff"></div></div>
+      <div class="linha sub" style="font-size:12px"><span style="flex:1">${num(at)}% de ${num(+c.meta || 0, 1)}% · meta ${dinheiro(alvo)}</span>
+        ${total ? `<span class="${dif >= 0 ? 'alta' : 'baixa'}" style="font-weight:650">${dif >= 0 ? 'Aportar ' : 'Reduzir '}${dinheiro(Math.abs(dif))}</span>` : ''}</div></div>`;
+  }).join('');
+  h += `<div class="sub">A barra branca é a meta. “Aportar/Reduzir” é quanto falta para cada lista ficar na meta.</div></div>`;
+
+  // simulação de aporte
+  h += `<div class="card"><h2>Vou aportar</h2><div class="linha">
+      <input id="aporte" type="number" inputmode="decimal" placeholder="Valor do aporte (R$)" value="${esc(aporteSim)}" oninput="aporteSim=this.value;simularAporte()"></div>
+      <div id="simAporte" style="margin-top:8px"></div></div>`;
+
+  // ativos por lista
+  cart.cats.forEach(c => {
+    const itens = cart.itens.filter(i => i.cat === c.id);
+    const aberta = cartAberta[c.id] !== false;
+    h += `<div class="card"><div class="linha" onclick="cartAberta['${c.id}']=${!aberta};gravar('cartAberta',cartAberta);telaCarteira()" style="cursor:pointer">
+      <span class="bola" style="background:${c.cor}"></span><h2 style="flex:1;margin:0">${esc(c.nome)} <span class="sub">(${itens.length})</span></h2>
+      <b>${dinheiro(porCat[c.id])}</b><span class="sub" style="margin-left:6px">${aberta ? '▾' : '▸'}</span></div>`;
+    if (aberta) {
+      h += itens.length ? itens.map(it => linhaItem(it, porCat[c.id])).join('') : `<div class="sub" style="margin-top:8px">Nenhum ativo nesta lista.</div>`;
+      h += `<button class="btn sec peq" style="margin-top:10px" onclick="formItem(null,'${c.id}')">+ Adicionar em ${esc(c.nome)}</button>`;
+    }
+    h += `</div>`;
+  });
+  const orfaos = cart.itens.filter(i => !catDe(i.cat));
+  if (orfaos.length) h += `<div class="card"><h2>Sem lista</h2>${orfaos.map(it => linhaItem(it, 0)).join('')}</div>`;
+
+  // evolução mensal
+  h += `<div class="card"><h2>Evolução mensal</h2>`;
+  if (!cart.hist.length) h += `<div class="sub">O total de cada mês é registrado sozinho sempre que você abre a carteira.</div>`;
+  else {
+    h += `<div class="grafico" style="height:180px;margin-bottom:8px"><canvas id="cvHist"></canvas></div>
+      <div style="display:grid;grid-template-columns:1fr 1.4fr 1fr 1fr;gap:6px 8px;font-size:13px;font-variant-numeric:tabular-nums">
+      <b class="sub">Mês</b><b class="sub" style="text-align:right">Total</b><b class="sub" style="text-align:right">% mês</b><b class="sub" style="text-align:right">% acum.</b>`;
+    const t0 = cart.hist[0].t;
+    h += cart.hist.map((x, i) => {
+      const pm = i ? (x.t / cart.hist[i - 1].t - 1) * 100 : null, pa = (x.t / t0 - 1) * 100;
+      return `<span>${nomeMes(x.m)}</span><span style="text-align:right">${dinheiro(x.t)}</span>
+        <span style="text-align:right" class="${pm == null ? 'sub' : pm >= 0 ? 'alta' : 'baixa'}">${pm == null ? '—' : pct(pm)}</span>
+        <span style="text-align:right" class="${pa >= 0 ? 'alta' : 'baixa'}">${pct(pa)}</span>`;
+    }).reverse().join('');
+    h += `</div><div class="sub" style="margin-top:8px">É a variação do patrimônio: aportes e resgates do mês entram no %.</div>`;
+  }
+  h += `</div>`;
+  $('tela').innerHTML = h;
+  simularAporte();
+  desenharHist();
+}
+function linhaItem(it, totCat) {
+  const v = valorItem(it), p = precoItem(it);
+  const res = it.sym && it.pm > 0 && p != null ? (p / it.pm - 1) * 100 : null;
+  const q = it.sym ? cotacoes[it.sym] : null;
+  return `<div class="al" style="cursor:pointer" onclick="formItem('${it.id}')">
+    <div class="t"><b>${esc(it.sym ? rot(it.sym) : it.nome)}</b>
+      ${it.sym ? `<span class="sub"> · ${num(+it.qtd || 0, (+it.qtd || 0) % 1 ? 2 : 0)} × ${p == null ? '—' : num(p)}</span>` : '<span class="sub"> · valor manual</span>'}
+      <div class="sub" style="font-size:12px">${totCat ? num(v / totCat * 100, 1) + '% da lista' : ''}${it.sym && it.pm > 0 ? ' · PM ' + num(it.pm) : ''}${q && q.var != null ? ` · <span class="${q.var >= 0 ? 'alta' : 'baixa'}">${pct(q.var)} hoje</span>` : ''}</div></div>
+    <div style="text-align:right;font-variant-numeric:tabular-nums"><div>${dinheiro(v)}</div>
+      ${res != null ? `<div class="${res >= 0 ? 'alta' : 'baixa'}" style="font-size:12px">${pct(res)}</div>` : ''}</div></div>`;
+}
+function simularAporte() {
+  const el = $('simAporte'); if (!el) return;
+  const A = parseFloat(String(aporteSim).replace(',', '.'));
+  if (!(A > 0)) { el.innerHTML = `<div class="sub">Digite um valor e eu digo quanto colocar em cada lista para chegar mais perto das metas.</div>`; return; }
+  const { porCat, total } = resumoCarteira(), T = total + A;
+  const falta = cart.cats.map(c => ({ c, f: Math.max(0, T * (+c.meta || 0) / 100 - porCat[c.id]) }));
+  const soma = falta.reduce((s, x) => s + x.f, 0);
+  const k = soma > A ? A / soma : 1;
+  let sobra = A - falta.reduce((s, x) => s + x.f * k, 0);
+  el.innerHTML = falta.filter(x => x.f * k >= 0.01).map(x => `<div class="linha" style="padding:4px 0"><span class="bola" style="background:${x.c.cor}"></span>
+      <span style="flex:1">${esc(x.c.nome)}</span><b>${dinheiro(x.f * k)}</b></div>`).join('') +
+    (sobra > 0.01 ? `<div class="sub">Sobram ${dinheiro(sobra)} — todas as listas já ficam na meta.</div>` : '');
+}
+function desenharHist() {
+  const cv = $('cvHist'); if (!cv) return;
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const v = cart.hist.map(x => x.t), n = v.length;
+  let lo = Math.min(...v), hi = Math.max(...v); const mg = (hi - lo) * 0.1 || hi * 0.05 || 1; lo -= mg; hi += mg;
+  const padL = 6, padR = 70, padT = 8, padB = 20;
+  const X = i => n === 1 ? (padL + W - padR) / 2 : padL + (W - padL - padR) * i / (n - 1);
+  const Y = y => padT + (H - padT - padB) * (1 - (y - lo) / (hi - lo));
+  g.font = '11px system-ui, sans-serif'; g.textBaseline = 'middle';
+  const passo = niceStep((hi - lo) / 4);
+  for (let y = Math.ceil(lo / passo) * passo; y <= hi; y += passo) {
+    g.strokeStyle = '#222933'; g.beginPath(); g.moveTo(padL, Y(y)); g.lineTo(W - padR, Y(y)); g.stroke();
+    g.fillStyle = '#6E7887'; g.fillText(dinheiro(y).replace(/,\d\d$/, ''), W - padR + 6, Y(y));
+  }
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  const passoX = Math.max(1, Math.ceil(n / 6));
+  for (let i = 0; i < n; i += passoX) g.fillText(nomeMes(cart.hist[i].m), X(i), H - 4);
+  g.textAlign = 'left';
+  g.beginPath(); v.forEach((y, i) => i ? g.lineTo(X(i), Y(y)) : g.moveTo(X(i), Y(y)));
+  g.strokeStyle = '#2F7BFF'; g.lineWidth = 2; g.stroke();
+  v.forEach((y, i) => { g.fillStyle = '#2F7BFF'; g.beginPath(); g.arc(X(i), Y(y), 3, 0, 7); g.fill(); });
+}
+
+/* --- folha (janela por cima) --- */
+function abrirFolha(html) {
+  let f = $('folha');
+  if (!f) { f = document.createElement('div'); f.id = 'folha'; document.body.appendChild(f); }
+  f.innerHTML = `<div class="fundo" onclick="fecharFolha()"></div><div class="painel">${html}</div>`;
+  f.style.display = 'block';
+}
+function fecharFolha() { const f = $('folha'); if (f && f.style.display !== 'none') { f.style.display = 'none'; f.innerHTML = ''; return true; } return false; }
+
+function formItem(id, catId) {
+  const it = id ? cart.itens.find(i => i.id === id) : null;
+  const manual = it ? !it.sym : catId ? (catDe(catId) || {}).nome === 'CAIXA' : false;
+  const cat = it ? it.cat : (catId || (cart.cats[1] || cart.cats[0] || {}).id);
+  abrirFolha(`<h2>${it ? 'Editar ativo' : 'Novo ativo'}</h2><div class="form">
+    <div class="modo"><button id="tpA" class="${manual ? '' : 'on'}" onclick="tipoItem(false)">Com cotação</button><button id="tpM" class="${manual ? 'on' : ''}" onclick="tipoItem(true)">Valor manual</button></div>
+    <div id="fA" class="form" style="${manual ? 'display:none' : ''}">
+      <input id="iSym" placeholder="Código: PETR4, HGLG11, AAPL34…" autocapitalize="characters" value="${it && it.sym ? esc(rot(it.sym)) : ''}">
+      <div class="linha"><input id="iQtd" type="number" inputmode="decimal" placeholder="Quantidade" value="${it && it.sym ? it.qtd : ''}">
+        <input id="iPm" type="number" inputmode="decimal" step="0.01" placeholder="Preço médio (opcional)" value="${it && it.pm ? it.pm : ''}"></div>
+    </div>
+    <div id="fM" class="form" style="${manual ? '' : 'display:none'}">
+      <input id="iNome" placeholder="Nome (ex.: Conta, CDB, Tesouro Selic)" value="${it && !it.sym ? esc(it.nome) : ''}">
+      <input id="iValor" type="number" inputmode="decimal" step="0.01" placeholder="Valor atual (R$)" value="${it && !it.sym ? it.valor : ''}">
+    </div>
+    <select id="iCat">${cart.cats.map(c => `<option value="${c.id}" ${c.id === cat ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select>
+    <div class="linha"><button class="btn" style="flex:1" onclick="salvarItem('${id || ''}')">Salvar</button>
+      ${it ? `<button class="btn sec" onclick="removerItem('${id}')">Excluir</button>` : ''}<button class="btn sec" onclick="fecharFolha()">Cancelar</button></div>
+  </div>`);
+}
+function tipoItem(m) {
+  $('tpA').classList.toggle('on', !m); $('tpM').classList.toggle('on', m);
+  $('fA').style.display = m ? 'none' : ''; $('fM').style.display = m ? '' : 'none';
+}
+async function salvarItem(id) {
+  const manual = $('tpM').classList.contains('on');
+  const n = x => parseFloat(String(x).replace(',', '.'));
+  const it = id ? cart.itens.find(i => i.id === id) : { id: novoId() };
+  it.cat = $('iCat').value;
+  if (manual) {
+    const nome = $('iNome').value.trim(), valor = n($('iValor').value);
+    if (!nome || !(valor >= 0)) { toast('Informe o nome e o valor.'); return; }
+    delete it.sym; delete it.qtd; delete it.pm; delete it.ult;
+    it.nome = nome; it.valor = valor;
+  } else {
+    const sym = normalizar($('iSym').value), qtd = n($('iQtd').value), pm = n($('iPm').value);
+    if (!sym || !(qtd > 0)) { toast('Informe o código e a quantidade.'); return; }
+    if (!cotacoes[sym]) { try { await buscarCotacao(sym); } catch (e) { toast('Não encontrei "' + rot(sym) + '".'); return; } }
+    delete it.nome; delete it.valor;
+    it.sym = sym; it.qtd = qtd; it.pm = pm > 0 ? pm : null; it.ult = cotacoes[sym].preco;
+  }
+  if (!id) cart.itens.push(it);
+  registrarMes(); salvarCart(); fecharFolha(); telaCarteira(); toast('Salvo');
+}
+function removerItem(id) {
+  if (!confirm('Excluir este ativo da carteira?')) return;
+  cart.itens = cart.itens.filter(i => i.id !== id); registrarMes(); salvarCart(); fecharFolha(); telaCarteira();
+}
+
+function editarListas() {
+  const linhas = cart.cats.map((c, i) => `<div class="linha" style="margin-bottom:8px">
+    <input type="color" value="${c.cor}" onchange="cart.cats[${i}].cor=this.value">
+    <input value="${esc(c.nome)}" onchange="cart.cats[${i}].nome=this.value.trim().toUpperCase()||'LISTA'">
+    <input style="width:80px;flex:none" type="number" inputmode="decimal" value="${c.meta}" onchange="cart.cats[${i}].meta=parseFloat(this.value.replace(',','.'))||0;somaMetasLista()">
+    <span class="sub">%</span><button class="x" onclick="apagarLista(${i})">×</button></div>`).join('');
+  abrirFolha(`<h2>Listas e metas</h2><div class="sub" style="margin-bottom:10px">Nome, cor e % da carteira que cada lista deve ter.</div>
+    ${linhas}<div id="somaMetas" class="sub"></div>
+    <div class="linha" style="margin-top:12px"><button class="btn sec" onclick="novaLista()">+ Nova lista</button><span style="flex:1"></span>
+      <button class="btn" onclick="salvarCart();fecharFolha();telaCarteira()">Pronto</button></div>`);
+  somaMetasLista();
+}
+function somaMetasLista() {
+  const s = cart.cats.reduce((a, c) => a + (+c.meta || 0), 0), el = $('somaMetas');
+  if (el) el.innerHTML = `Soma das metas: <b class="${Math.abs(s - 100) < 0.01 ? 'alta' : 'baixa'}">${num(s, 1)}%</b>`;
+}
+function novaLista() {
+  cart.cats.push({ id: novoId(), nome: 'NOVA LISTA', meta: 0, cor: CORES[cart.cats.length % CORES.length] }); editarListas();
+}
+function apagarLista(i) {
+  const c = cart.cats[i], n = cart.itens.filter(x => x.cat === c.id).length;
+  if (n && !confirm(`A lista ${c.nome} tem ${n} ativo(s). Apagar a lista e esses ativos?`)) return;
+  cart.itens = cart.itens.filter(x => x.cat !== c.id); cart.cats.splice(i, 1); editarListas();
+}
+
+/* ===================== Importação da B3 ===================== */
+function importarB3() {
+  abrirFolha(`<h2>Importar da B3</h2>
+    <div class="sub" style="line-height:1.6">
+    1. Entre em <b>investidor.b3.com.br</b> (Área do Investidor).<br>
+    2. Vá em <b>Extratos › Posição</b>, escolha a data e toque em <b>Baixar › Excel</b>.<br>
+    3. Volte aqui e escolha o arquivo baixado.<br><br>
+    Opcional: em <b>Extratos › Negociação</b> baixe o Excel das compras e vendas — o app calcula o <b>preço médio</b> de cada ativo.<br><br>
+    Ações vão para a lista DY, FIIs para FII, BDRs para BDR e Tesouro/Renda Fixa para CAIXA. Depois você pode mudar a lista de cada ativo.</div>
+    <div class="linha" style="margin-top:14px"><button class="btn" style="flex:1" onclick="$('arqB3').click()">Escolher arquivo</button>
+      <button class="btn sec" onclick="fecharFolha()">Cancelar</button></div>`);
+}
+async function lerArquivoB3(inp) {
+  const f = inp.files && inp.files[0]; inp.value = '';
+  if (!f) return;
+  try {
+    const buf = new Uint8Array(await f.arrayBuffer());
+    const planilhas = /\.csv$/i.test(f.name) ? { CSV: lerCSV(new TextDecoder('utf-8').decode(buf)) } : await lerXLSX(buf);
+    const r = aplicarImportacao(planilhas);
+    registrarMes(); salvarCart(); fecharFolha(); telaCarteira(); atualizarCotacoesCarteira();
+    abrirFolha(`<h2>Importação concluída</h2><div style="line-height:1.6">${r}</div>
+      <button class="btn" style="margin-top:14px;width:100%" onclick="fecharFolha()">OK</button>`);
+  } catch (e) {
+    fecharFolha();
+    abrirFolha(`<h2>Não consegui ler o arquivo</h2><div class="sub">${esc(e.message)}</div>
+      <div class="sub" style="margin-top:8px">Use o Excel de <b>Posição</b> ou de <b>Negociação</b> baixado da Área do Investidor da B3.</div>
+      <button class="btn" style="margin-top:14px;width:100%" onclick="fecharFolha()">OK</button>`);
+  }
+}
+
+// --- leitor de .xlsx (zip + xml) sem bibliotecas ---
+async function inflar(dados) {
+  if (typeof DecompressionStream === 'undefined') throw new Error('Este aparelho não consegue abrir .xlsx. Atualize o “Android System WebView” na Play Store.');
+  const s = new Blob([dados]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(s).arrayBuffer());
+}
+async function lerZip(b) {
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  let e = b.length - 22;
+  while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+  if (e < 0) throw new Error('O arquivo não é um Excel (.xlsx) válido.');
+  const n = dv.getUint16(e + 10, true); let p = dv.getUint32(e + 16, true);
+  const arqs = {}, td = new TextDecoder('utf-8');
+  for (let i = 0; i < n; i++) {
+    const metodo = dv.getUint16(p + 10, true), tam = dv.getUint32(p + 20, true);
+    const ln = dv.getUint16(p + 28, true), lx = dv.getUint16(p + 30, true), lc = dv.getUint16(p + 32, true);
+    const off = dv.getUint32(p + 42, true), nome = td.decode(b.subarray(p + 46, p + 46 + ln));
+    const ini = off + 30 + dv.getUint16(off + 26, true) + dv.getUint16(off + 28, true);
+    const bruto = b.subarray(ini, ini + tam);
+    arqs[nome] = async () => td.decode(metodo === 0 ? bruto : await inflar(bruto));
+    p += 46 + ln + lx + lc;
+  }
+  return arqs;
+}
+async function lerXLSX(b) {
+  const z = await lerZip(b), xml = async n => z[n] ? new DOMParser().parseFromString(await z[n](), 'application/xml') : null;
+  const tag = (d, t) => [...d.getElementsByTagName(t)];
+  const ss = [], dss = await xml('xl/sharedStrings.xml');
+  if (dss) tag(dss, 'si').forEach(si => ss.push(tag(si, 't').map(t => t.textContent).join('')));
+  const wb = await xml('xl/workbook.xml'), rels = await xml('xl/_rels/workbook.xml.rels');
+  if (!wb) throw new Error('O arquivo não é um Excel (.xlsx) válido.');
+  const alvo = {};
+  if (rels) tag(rels, 'Relationship').forEach(r => alvo[r.getAttribute('Id')] = r.getAttribute('Target'));
+  const out = {};
+  for (const sh of tag(wb, 'sheet')) {
+    const rid = sh.getAttribute('r:id') || sh.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id');
+    let t = alvo[rid] || ''; t = t.replace(/^\/?xl\//, '').replace(/^\//, '');
+    const d = await xml('xl/' + t); if (!d) continue;
+    const linhas = [];
+    tag(d, 'row').forEach(row => {
+      const l = [];
+      tag(row, 'c').forEach(c => {
+        const ref = c.getAttribute('r') || '', col = ref.replace(/\d+/g, '');
+        let idx = 0; for (const ch of col) idx = idx * 26 + ch.charCodeAt(0) - 64; idx--;
+        const tp = c.getAttribute('t'), vEl = c.getElementsByTagName('v')[0];
+        let v = vEl ? vEl.textContent : '';
+        if (tp === 's') v = ss[+v] || '';
+        else if (tp === 'inlineStr') v = tag(c, 't').map(x => x.textContent).join('');
+        l[idx >= 0 ? idx : l.length] = v;
+      });
+      linhas.push(Array.from(l, x => x == null ? '' : String(x).trim()));
+    });
+    out[sh.getAttribute('name')] = linhas;
+  }
+  return out;
+}
+function lerCSV(txt) {
+  const sep = (txt.split('\n')[0].match(/;/g) || []).length > (txt.split('\n')[0].match(/,/g) || []).length ? ';' : ',';
+  return txt.split(/\r?\n/).filter(l => l.trim()).map(l => l.split(sep).map(x => x.replace(/^"|"$/g, '').trim()));
+}
+function numBR(x) {
+  if (x == null || x === '' || x === '-') return NaN;
+  if (typeof x === 'number') return x;
+  let s = String(x).replace(/R\$|\s/g, '');
+  if (/^-?\d+(\.\d+)?(e-?\d+)?$/i.test(s)) return parseFloat(s);   // número do próprio Excel
+  return parseFloat(s.replace(/\./g, '').replace(',', '.'));
+}
+function dataNum(x) {
+  if (/^\d+(\.\d+)?$/.test(x)) return +x;                         // data serial do Excel
+  const m = String(x).match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  return m ? Date.UTC(+m[3], +m[2] - 1, +m[1]) / 864e5 + 25569 : 0;
+}
+const semAcento = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+function acharCabecalho(linhas, exigidas) {
+  for (let i = 0; i < Math.min(linhas.length, 15); i++) {
+    const h = linhas[i].map(semAcento);
+    if (exigidas.every(e => h.some(c => c.includes(e)))) return { i, col: nome => h.findIndex(c => c.includes(nome)) };
+  }
+  return null;
+}
+function catPorNome(nomes, criar) {
+  for (const n of nomes) { const c = cart.cats.find(x => semAcento(x.nome) === semAcento(n)); if (c) return c.id; }
+  for (const n of nomes) { const c = cart.cats.find(x => semAcento(x.nome).includes(semAcento(n))); if (c) return c.id; }
+  const c = { id: novoId(), nome: criar, meta: 0, cor: CORES[cart.cats.length % CORES.length] };
+  cart.cats.push(c); return c.id;
+}
+function tipoPorTicker(t, aba) {
+  const a = semAcento(aba);
+  if (a.includes('bdr') || /3[1-5]$/.test(t)) return 'bdr';
+  if (a.includes('fundo') || a.includes('fii') || a.includes('imobili')) return 'fii';
+  if (a.includes('etf')) return /^GOLD|^OURO/.test(t) ? 'ouro' : 'etf';
+  if (a.includes('acoes') || a.includes('acao')) return 'acao';
+  return /11$/.test(t) ? 'fii' : 'acao';
+}
+function catPorTipo(tp) {
+  return tp === 'bdr' ? catPorNome(['BDR'], 'BDR') : tp === 'fii' ? catPorNome(['FII', 'FIIS'], 'FII')
+    : tp === 'ouro' ? catPorNome(['OURO'], 'OURO') : tp === 'etf' ? catPorNome(['ETF', 'ETFS'], 'ETF')
+    : catPorNome(['DY', 'ACOES', 'AÇÕES'], 'AÇÕES');
+}
+const limparTicker = t => String(t).toUpperCase().replace(/\s/g, '').replace(/F$/, '');
+
+function aplicarImportacao(planilhas) {
+  const pos = {}, neg = {}, manuais = [];
+  for (const [aba, linhas] of Object.entries(planilhas)) {
+    // Extrato de Negociação: compras e vendas → quantidade e preço médio
+    let c = acharCabecalho(linhas, ['data do negocio', 'codigo de negociacao', 'quantidade', 'preco']);
+    if (c) {
+      const cD = c.col('data do negocio'), cT = c.col('tipo de movimentacao'), cC = c.col('codigo de negociacao'),
+        cQ = c.col('quantidade'), cP = c.col('preco'), ops = [];
+      for (let i = c.i + 1; i < linhas.length; i++) {
+        const l = linhas[i], tk = limparTicker(l[cC] || ''); if (!tk) continue;
+        const q = numBR(l[cQ]), p = numBR(l[cP]); if (!(q > 0)) continue;
+        ops.push({ d: dataNum(l[cD]), tk, q, p, venda: semAcento(l[cT] || '').startsWith('v') });
+      }
+      ops.sort((a, b) => a.d - b.d).forEach(o => {
+        const x = neg[o.tk] = neg[o.tk] || { q: 0, custo: 0, aba };
+        if (o.venda) { const pm = x.q ? x.custo / x.q : 0; x.q = Math.max(0, x.q - o.q); x.custo = pm * x.q; }
+        else { x.q += o.q; x.custo += o.q * o.p; }
+      });
+      continue;
+    }
+    // Extrato de Posição: ações, FIIs, BDRs, ETFs
+    c = acharCabecalho(linhas, ['codigo de negociacao', 'quantidade']);
+    if (c) {
+      const cC = c.col('codigo de negociacao'), cQ = c.col('quantidade');
+      for (let i = c.i + 1; i < linhas.length; i++) {
+        const tk = limparTicker(linhas[i][cC] || ''), q = numBR(linhas[i][cQ]);
+        if (!/^[A-Z0-9]{4,6}\d{0,2}$/.test(tk) || !(q > 0)) continue;
+        pos[tk] = { q: (pos[tk] ? pos[tk].q : 0) + q, aba };
+      }
+      continue;
+    }
+    // Tesouro Direto / Renda Fixa: entram como valor manual
+    c = acharCabecalho(linhas, ['produto', 'valor atualizado']);
+    if (c) {
+      const cP = c.col('produto'), cV = c.col('valor atualizado');
+      for (let i = c.i + 1; i < linhas.length; i++) {
+        const nome = linhas[i][cP], v = numBR(linhas[i][cV]);
+        if (nome && v > 0 && !/^total/i.test(nome)) manuais.push({ nome, v });
+      }
+    }
+  }
+  const nPos = Object.keys(pos).length, nNeg = Object.keys(neg).length;
+  if (!nPos && !nNeg && !manuais.length) throw new Error('Não encontrei ativos neste arquivo.');
+  const novos = [], atualizados = [];
+  const acharItem = tk => cart.itens.find(i => i.sym && limparTicker(rot(i.sym)) === tk);
+  const symDe = tk => /^[A-Z]{4}\d{1,2}$/.test(tk) ? tk + '.SA' : tk;
+  for (const [tk, x] of Object.entries(pos)) {
+    let it = acharItem(tk);
+    if (it) { it.qtd = x.q; atualizados.push(tk); }
+    else { cart.itens.push({ id: novoId(), cat: catPorTipo(tipoPorTicker(tk, x.aba)), sym: symDe(tk), qtd: x.q, pm: null, b3: true }); novos.push(tk); }
+  }
+  let comPM = 0;
+  for (const [tk, x] of Object.entries(neg)) {
+    if (!(x.q > 0)) continue;
+    let it = acharItem(tk);
+    if (!it) { it = { id: novoId(), cat: catPorTipo(tipoPorTicker(tk, x.aba)), sym: symDe(tk), qtd: x.q, b3: true }; cart.itens.push(it); novos.push(tk); }
+    it.pm = +(x.custo / x.q).toFixed(4); comPM++;
+  }
+  const caixa = manuais.length ? catPorNome(['CAIXA', 'RENDA FIXA'], 'CAIXA') : null;
+  manuais.forEach(m => {
+    const it = cart.itens.find(i => !i.sym && i.nome === m.nome);
+    if (it) it.valor = m.v; else cart.itens.push({ id: novoId(), cat: caixa, nome: m.nome, valor: m.v, b3: true });
+  });
+  const fora = nPos ? cart.itens.filter(i => i.sym && i.b3 && !pos[limparTicker(rot(i.sym))]).map(i => rot(i.sym)) : [];
+  let r = '';
+  if (novos.length) r += `<b>${novos.length}</b> ativo(s) novo(s): ${[...new Set(novos)].join(', ')}<br>`;
+  if (atualizados.length) r += `<b>${atualizados.length}</b> quantidade(s) atualizada(s)<br>`;
+  if (comPM) r += `Preço médio calculado para <b>${comPM}</b> ativo(s)<br>`;
+  if (manuais.length) r += `<b>${manuais.length}</b> título(s) de Tesouro/Renda Fixa na lista CAIXA<br>`;
+  if (fora.length) r += `<br><span class="sub">Não estão mais na posição da B3: ${fora.join(', ')}. Se vendeu, exclua da carteira.</span>`;
+  return r || 'Nada mudou.';
 }
 
 /* ===================== Simulação (só para testar fora do celular) ===================== */
@@ -602,10 +1198,10 @@ function simulacao() {
       setTimeout(() => {
         const sym = decodeURIComponent(url.split('/chart/')[1].split('?')[0]);
         if (sym.startsWith('XXXX')) return window.__cb(id, false, 'HTTP 404');
-        const sem = url.includes('1wk'), n = url.includes('5d') ? 5 : sem ? 520 : 1250;
-        const { ts, c } = serie(sym, n, sem ? 7 : 1);
-        const full = serie(sym, 1250, 1);
-        const preco = full.c[full.c.length - 1];
+        const sem = url.includes('1wk'), n = url.includes('5d') ? 5 : sem ? 700 : 2500;
+        const full = serie(sym, 3500, 1), preco = full.c[full.c.length - 1];
+        let ts = full.ts.slice(-n), c = full.c.slice(-n);
+        if (sem) { ts = []; c = []; for (let i = full.c.length - 1; i >= 0; i -= 5) { ts.unshift(full.ts[i]); c.unshift(full.c[i]); } }
         window.__cb(id, true, JSON.stringify({ chart: { result: [{ meta: { regularMarketPrice: preco, currency: sym.endsWith('.SA') ? 'BRL' : 'USD', shortName: nomes[sym] || sym },
           timestamp: ts, indicators: { quote: [(() => { const cc = url.includes('5d') ? full.c.slice(-5) : c;
             const o = cc.map((x, i) => i ? cc[i - 1] : x);

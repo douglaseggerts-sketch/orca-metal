@@ -6,8 +6,8 @@
 
 const URL_Y = 'https://query1.finance.yahoo.com/v8/finance/chart/';
 
-async function baixar(baixarTexto, sym) {
-  const j = JSON.parse(await baixarTexto(URL_Y + encodeURIComponent(sym) + '?range=2y&interval=1d'));
+async function baixar(baixarTexto, sym, semanal) {
+  const j = JSON.parse(await baixarTexto(URL_Y + encodeURIComponent(sym) + (semanal ? '?range=10y&interval=1wk' : '?range=2y&interval=1d')));
   const r = j.chart && j.chart.result && j.chart.result[0];
   if (!r) throw new Error('sem dados para ' + sym);
   const c = ((r.indicators.quote[0] || {}).close || []).filter(x => x != null);
@@ -36,6 +36,19 @@ function media(v, p, tipo) {
   return s / p;
 }
 
+function ifr(v, p) {
+  const n = v.length;
+  if (p < 2 || n <= p) return NaN;
+  let g = 0, l = 0;
+  for (let i = 1; i <= p; i++) { const d = v[i] - v[i - 1]; if (d > 0) g += d; else l -= d; }
+  g /= p; l /= p;
+  for (let i = p + 1; i < n; i++) {
+    const d = v[i] - v[i - 1];
+    g = (g * (p - 1) + Math.max(d, 0)) / p; l = (l * (p - 1) + Math.max(-d, 0)) / p;
+  }
+  return l === 0 ? 100 : 100 - 100 / (1 + g / l);
+}
+
 function dinheiro(v, moeda) {
   try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: moeda }).format(v); }
   catch (e) { return v.toFixed(2); }
@@ -62,9 +75,17 @@ async function verificar(store, baixarTexto, notificar) {
   let disparados = 0;
 
   for (const sym of syms) {
-    let s;
-    try { s = await baixar(baixarTexto, sym); } catch (e) { erros.push(rot(sym)); continue; }
+    const cache = {};
     for (const a of porAtivo[sym]) {
+      const ind = /^(cruza|ifr)/.test(a.tipo || '');
+      const semanal = ind && a.tf === 'w';
+      const k = semanal ? 'w' : 'd';
+      if (!cache[k]) {
+        try { cache[k] = await baixar(baixarTexto, sym, semanal); }
+        catch (e) { if (!erros.includes(rot(sym))) erros.push(rot(sym)); continue; }
+      }
+      const s = cache[k];
+      const sufixo = ind ? (semanal ? ' (semanal)' : ' (diário)') : '';
       const m = {};
       let titulo = null, texto = null;
       if (a.tipo === 'abaixo' || a.tipo === 'acima') {
@@ -90,9 +111,19 @@ async function verificar(store, baixarTexto, notificar) {
           texto = 'Preço ' + dinheiro(s.preco, s.moeda) + '. ' + nc + ' = ' + dinheiro(curta, s.moeda) +
             ', ' + nl + ' = ' + dinheiro(longa, s.moeda) + '.';
         }
+      } else if (a.tipo === 'ifr_abaixo' || a.tipo === 'ifr_acima') {
+        const pi = a.ifrP || 9, r = ifr(s.fech, pi);
+        if (!(a.valor > 0) || isNaN(r)) continue;
+        const compra = a.tipo === 'ifr_abaixo';
+        if (compra ? r <= a.valor : r >= a.valor) {
+          titulo = (compra ? '🟢 COMPRA: ' : '🔴 VENDA: ') + rot(sym) + ' — IFR(' + pi + ') ' +
+            r.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + (compra ? ' (sobrevendido)' : ' (sobrecomprado)');
+          texto = 'Preço ' + dinheiro(s.preco, s.moeda) + '. IFR ' + (compra ? '≤ ' : '≥ ') + a.valor + '.';
+        }
       } else continue;
 
       if (titulo) {
+        titulo += sufixo;
         if (a.nota) texto += '\n' + a.nota;
         Object.assign(m, { disparadoEm: Date.now(), precoDisparo: s.preco, ativo: false });
         notificar(titulo, texto);
@@ -118,4 +149,4 @@ async function verificar(store, baixarTexto, notificar) {
   return r;
 }
 
-module.exports = { verificar, media };
+module.exports = { verificar, media, ifr };
