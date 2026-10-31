@@ -216,6 +216,7 @@ final class AlertEngine {
                         String lado = curta > longa ? "acima" : "abaixo";
                         String antes = a.optString("ultimoLado", "");
                         m.put("ultimoLado", lado);
+                        m.put("ladoEm", System.currentTimeMillis());
                         boolean cruzou = !antes.isEmpty() && !antes.equals(lado);
                         boolean querCima = "cruza_cima".equals(tipo);
                         if (cruzou && (querCima == "acima".equals(lado))) {
@@ -254,6 +255,7 @@ final class AlertEngine {
                         m.put("disparadoEm", System.currentTimeMillis());
                         m.put("precoDisparo", s.preco);
                         m.put("ativo", false);
+                        m.put("mod", System.currentTimeMillis());
                         Notif.mostrar(ctx, id.hashCode(), titulo, texto);
                         disparados++;
                     }
@@ -287,7 +289,8 @@ final class AlertEngine {
                     } catch (Exception ignored) {
                     }
                 }
-                Store.salvarAlertas(ctx, atual);
+                // só "disparou" conta como alteração para a sincronização; o lado das médias é interno
+                Store.salvarAlertas(ctx, atual, disparados > 0);
             }
         }
         Store.put(ctx, "ultimaVerificacao", String.valueOf(System.currentTimeMillis()));

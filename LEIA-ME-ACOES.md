@@ -18,7 +18,14 @@ Os dois também podem ser rodados manualmente em Actions › Run workflow.
 - PC: a cada 5 min, enquanto o programa estiver aberto ou minimizado perto do relógio. Inicia com o Windows
   (dá para desligar no menu do ícone).
 - Cada alerta dispara uma vez e fica pausado; ligue a chave para reativar.
-- Celular e PC têm listas separadas.
+- Celular e PC ficam iguais se a sincronização pela Planilha Google estiver ligada (veja abaixo).
+
+## Sincronização pela Planilha Google
+1. Na planilha: Extensões › Apps Script. Cole o arquivo `planilha/MonitorAcoes.gs` e troque a SENHA.
+2. Implantar › Nova implantação › App da Web · Executar como: Eu · Quem pode acessar: Qualquer pessoa.
+3. Copie o URL do app da Web e cole nos dois apps em Indicadores › Sincronizar celular e PC (com a mesma senha).
+   Configure primeiro no aparelho que já tem a carteira certa.
+A planilha ganha a aba "Carteira (app)" (listas, metas, ativos, aportes e evolução) e a aba oculta "_monitor_sync".
 
 ## Estrutura
 - `acoes/app/src/main/assets/index.html` — a tela (usada pelos dois).

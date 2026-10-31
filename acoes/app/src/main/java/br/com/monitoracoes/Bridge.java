@@ -71,7 +71,23 @@ public class Bridge {
     public void verificarAgora(final String cbId) {
         new Thread(() -> {
             try {
-                responder(cbId, true, AlertEngine.verificar(act.getApplicationContext()));
+                android.content.Context ctx = act.getApplicationContext();
+                Sync.tentar(ctx);
+                String r = AlertEngine.verificar(ctx);
+                Sync.tentar(ctx);
+                responder(cbId, true, r);
+            } catch (Exception e) {
+                responder(cbId, false, String.valueOf(e.getMessage()));
+            }
+        }).start();
+    }
+
+    /** Sincroniza com a Planilha Google. Resposta (resumo) volta por window.__cb. */
+    @JavascriptInterface
+    public void sincronizar(final String cbId) {
+        new Thread(() -> {
+            try {
+                responder(cbId, true, Sync.sincronizar(act.getApplicationContext()));
             } catch (Exception e) {
                 responder(cbId, false, String.valueOf(e.getMessage()));
             }

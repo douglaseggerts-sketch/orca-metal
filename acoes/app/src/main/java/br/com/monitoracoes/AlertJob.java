@@ -29,7 +29,10 @@ public class AlertJob extends JobService {
     public boolean onStartJob(final JobParameters params) {
         new Thread(() -> {
             try {
+                // pega as alterações do outro aparelho, confere e devolve o resultado
+                Sync.tentar(getApplicationContext());
                 AlertEngine.verificar(getApplicationContext());
+                Sync.tentar(getApplicationContext());
             } catch (Exception ignored) {
             }
             jobFinished(params, false);

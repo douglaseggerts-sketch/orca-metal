@@ -102,7 +102,7 @@ async function verificar(store, baixarTexto, notificar) {
         if (isNaN(curta) || isNaN(longa)) continue;
         const lado = curta > longa ? 'acima' : 'abaixo';
         const antes = a.ultimoLado || '';
-        m.ultimoLado = lado;
+        m.ultimoLado = lado; m.ladoEm = Date.now();
         const querCima = a.tipo === 'cruza_cima';
         if (antes && antes !== lado && querCima === (lado === 'acima')) {
           const nc = nomeMM(pc, tm), nl = nomeMM(pl, tm);
@@ -125,7 +125,7 @@ async function verificar(store, baixarTexto, notificar) {
       if (titulo) {
         titulo += sufixo;
         if (a.nota) texto += '\n' + a.nota;
-        Object.assign(m, { disparadoEm: Date.now(), precoDisparo: s.preco, ativo: false });
+        Object.assign(m, { disparadoEm: Date.now(), precoDisparo: s.preco, ativo: false, mod: Date.now() });
         notificar(titulo, texto);
         disparados++;
       }
@@ -140,7 +140,8 @@ async function verificar(store, baixarTexto, notificar) {
       const m = mudancas[a.id];
       if (m && a.ativo !== false) Object.assign(a, m);
     }
-    store.salvarAlertas(atual);
+    // só "disparou" conta como alteração para a sincronização; o lado das médias é interno
+    store.salvarAlertas(atual, disparados > 0);
   }
   store.put('ultimaVerificacao', String(Date.now()));
 

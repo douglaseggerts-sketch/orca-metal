@@ -25,12 +25,53 @@ function gravarArquivo() {
     fs.renameSync(ARQ() + '.tmp', ARQ());
   } catch (e) { console.error(e); }
 }
+// chaves que vão para a planilha; cada uma guarda a hora da última alteração em _t
+const SINCRONIZADAS = ['lista', 'medias', 'ifr', 'carteira', 'alertas', 'alertasExcluidos'];
 const store = {
   get: (k) => (carregar()[k] != null ? String(carregar()[k]) : ''),
-  put: (k, v) => { carregar()[k] = v; gravarArquivo(); },
+  tem: (k) => carregar()[k] != null,
+  tempo: (k) => ((carregar()._t || {})[k] || 0),
+  put: (k, v, t) => {
+    const d = carregar(), mudou = d[k] !== v;
+    d[k] = v;
+    if (SINCRONIZADAS.includes(k) && (t != null || mudou)) { d._t = d._t || {}; d._t[k] = t != null ? t : Date.now(); }
+    gravarArquivo();
+  },
   alertas: () => { try { return JSON.parse(store.get('alertas') || '[]'); } catch (e) { return []; } },
-  salvarAlertas: (a) => store.put('alertas', JSON.stringify(a))
+  salvarAlertas: (a, alterou = true) => {
+    const d = carregar(); d.alertas = JSON.stringify(a);
+    if (alterou) { d._t = d._t || {}; d._t.alertas = Date.now(); }
+    gravarArquivo();
+  }
 };
+
+/* ---------- sincronização com a Planilha Google ---------- */
+let sincronizando = null;
+function syncConfigurado() { return !!(store.get('syncUrl') && store.get('syncChave')); }
+async function sincronizar() {
+  if (sincronizando) return sincronizando;
+  sincronizando = (async () => {
+    const url = store.get('syncUrl').trim(), chave = store.get('syncChave').trim();
+    if (!url || !chave) return 'Sincronização não configurada.';
+    if (!url.startsWith('https://script.google.com/')) throw new Error('O endereço deve começar com https://script.google.com/');
+    const dados = {};
+    SINCRONIZADAS.forEach(k => { if (store.tem(k)) dados[k] = { v: store.get(k), t: store.tempo(k) }; });
+    const r = await net.fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ chave, dados, aparelho: 'pc' }) });
+    const txt = await r.text();
+    let j; try { j = JSON.parse(txt); } catch (e) { throw new Error('a planilha não respondeu (confira o endereço e se o script foi publicado para “Qualquer pessoa”)'); }
+    if (!j.ok) throw new Error(j.erro || 'a planilha recusou a sincronização');
+    let recebidos = 0;
+    for (const [k, o] of Object.entries(j.dados || {})) {
+      if (!SINCRONIZADAS.includes(k) || o == null || o.v == null) continue;
+      if (o.v !== (store.tem(k) ? store.get(k) : null) && (o.t || 0) >= store.tempo(k)) { store.put(k, o.v, o.t || 0); recebidos++; }
+    }
+    store.put('ultimaSync', String(Date.now()));
+    return recebidos ? `Sincronizado (${recebidos} item(ns) recebido(s)).` : 'Sincronizado.';
+  })();
+  try { return await sincronizando; } finally { sincronizando = null; }
+}
+async function tentarSync() { if (syncConfigurado()) { try { await sincronizar(); } catch (e) { } } }
 
 /* ---------- internet (só Yahoo Finance) ---------- */
 async function baixarTexto(url) {
@@ -54,13 +95,20 @@ let verificando = false;
 async function verificar() {
   if (verificando) return 'Verificação já em andamento.';
   verificando = true;
-  try { return await motor.verificar(store, baixarTexto, notificar); }
+  try {
+    await tentarSync();
+    const r = await motor.verificar(store, baixarTexto, notificar);
+    await tentarSync();
+    janela && janela.webContents.executeJavaScript('window.aoSincronizar && window.aoSincronizar()').catch(() => { });
+    return r;
+  }
   finally { verificando = false; }
 }
 
 /* ---------- ponte com a tela ---------- */
 ipcMain.handle('fetch', (e, url) => baixarTexto(url));
 ipcMain.handle('verificarAgora', () => verificar());
+ipcMain.handle('sincronizar', () => sincronizar());
 ipcMain.on('load', (e, k) => { e.returnValue = store.get(k); });
 ipcMain.on('save', (e, k, v) => { store.put(k, v); e.returnValue = true; });
 ipcMain.on('alertas', (e) => { e.returnValue = JSON.stringify(store.alertas()); });
@@ -68,20 +116,22 @@ ipcMain.on('addAlerta', (e, j) => {
   const a = store.alertas();
   try {
     const o = JSON.parse(j);
-    if (!o.id) o.id = String(Date.now());
-    o.ativo = true; o.criadoEm = Date.now();
+    if (!o.id) o.id = Date.now() + '-' + Math.random().toString(16).slice(2, 6);
+    o.ativo = true; o.criadoEm = Date.now(); o.mod = Date.now();
     a.push(o); store.salvarAlertas(a);
   } catch (err) { }
   e.returnValue = JSON.stringify(a);
 });
 ipcMain.on('removerAlerta', (e, id) => {
   const a = store.alertas().filter(x => x.id !== id);
+  let exc = {}; try { exc = JSON.parse(store.get('alertasExcluidos') || '{}'); } catch (err) { }
+  exc[id] = Date.now(); store.put('alertasExcluidos', JSON.stringify(exc));
   store.salvarAlertas(a); e.returnValue = JSON.stringify(a);
 });
 ipcMain.on('ativarAlerta', (e, id, on) => {
   const a = store.alertas();
   a.forEach(x => {
-    if (x.id === id) { x.ativo = !!on; if (on) { delete x.disparadoEm; delete x.precoDisparo; delete x.ultimoLado; } }
+    if (x.id === id) { x.ativo = !!on; x.mod = Date.now(); if (on) { delete x.disparadoEm; delete x.precoDisparo; delete x.ultimoLado; delete x.ladoEm; } }
   });
   store.salvarAlertas(a); e.returnValue = JSON.stringify(a);
 });

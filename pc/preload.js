@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('Android', {
   plataforma: () => 'pc',
   fetch: (url) => ipcRenderer.invoke('fetch', url),
   verificarAgora: () => ipcRenderer.invoke('verificarAgora'),
+  sincronizar: () => ipcRenderer.invoke('sincronizar'),
   load: (k) => ipcRenderer.sendSync('load', k),
   save: (k, v) => ipcRenderer.sendSync('save', k, v),
   alertas: () => ipcRenderer.sendSync('alertas'),

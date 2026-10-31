@@ -32,6 +32,41 @@ final class Http {
         }
     }
 
+    /**
+     * POST de texto JSON. O app da Web do Google responde com um redirecionamento (302)
+     * para outro endereço, que precisa ser lido com GET.
+     */
+    static String post(String url, String corpo) throws IOException {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        try {
+            c.setConnectTimeout(20000);
+            c.setReadTimeout(40000);
+            c.setInstanceFollowRedirects(false);
+            c.setDoOutput(true);
+            c.setRequestMethod("POST");
+            c.setRequestProperty("Content-Type", "text/plain; charset=utf-8");
+            byte[] b = corpo.getBytes(StandardCharsets.UTF_8);
+            c.setFixedLengthStreamingMode(b.length);
+            c.getOutputStream().write(b);
+            int code = c.getResponseCode();
+            if (code >= 300 && code < 400) {
+                String destino = c.getHeaderField("Location");
+                if (destino == null) {
+                    throw new IOException("redirecionamento sem destino");
+                }
+                return get(destino);
+            }
+            InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+            String r = ler(in);
+            if (code >= 400) {
+                throw new IOException("HTTP " + code);
+            }
+            return r;
+        } finally {
+            c.disconnect();
+        }
+    }
+
     private static String ler(InputStream in) throws IOException {
         if (in == null) {
             return "";

@@ -132,8 +132,48 @@ function chamar(fn, ...args) {
 function ler(chave, padrao) {
   try { const v = B.load(chave); return v ? JSON.parse(v) : padrao; } catch (e) { return padrao; }
 }
-function gravar(chave, v) { B.save(chave, JSON.stringify(v)); }
 function alertas() { try { return JSON.parse(B.alertas()); } catch (e) { return []; } }
+
+/* ===================== Sincronização (Planilha Google) ===================== */
+var SINC = ['lista', 'medias', 'ifr', 'carteira'], syncPronto = false, syncTimer = null;
+function gravar(chave, v) { B.save(chave, JSON.stringify(v)); if (SINC.includes(chave)) agendarSync(); }
+function syncConfig() { return !!(B.sincronizar && B.load('syncUrl') && B.load('syncChave')); }
+function agendarSync() {
+  if (!syncConfig()) return;
+  clearTimeout(syncTimer); syncTimer = setTimeout(() => sincronizarAgora(true), 2500);
+}
+async function sincronizarAgora(silencioso) {
+  if (!syncConfig()) { syncPronto = true; return; }
+  try {
+    const r = await chamar('sincronizar');
+    syncPronto = true;
+    if (/recebido/.test(r)) aplicarRemoto();
+    if (!silencioso) toast(r);
+  } catch (e) {
+    syncPronto = true;
+    if (!silencioso) toast('Sincronização: ' + e.message);
+  }
+  if (view === 'medias' && $('syncStatus')) $('syncStatus').innerHTML = statusSync();
+}
+function recarregarEstado() {
+  lista = ler('lista', lista); medias = ler('medias', medias);
+  ifrCfg = Object.assign({ p: 9, mm: 9, sup: 70, inf: 30, on: true }, ler('ifr', {}));
+  cart = ler('carteira', null) || cart;
+}
+function aplicarRemoto() {
+  recarregarEstado();
+  const f = $('folha'); if (f && f.style.display === 'block') return;
+  if (view === 'detalhe') { listarAlertasAtivo(); desenharDetalhe(); }
+  else if (view === 'lista') atualizarLista();
+  else if (view === 'carteira') telaCarteira();
+  else render();
+}
+window.aoSincronizar = aplicarRemoto;
+function statusSync() {
+  if (!syncConfig()) return 'Não configurada — cada aparelho tem seus próprios dados.';
+  const u = +B.load('ultimaSync');
+  return u ? 'Última sincronização: ' + new Date(u).toLocaleString('pt-BR') : 'Ainda não sincronizou.';
+}
 
 /* ===================== Estado ===================== */
 const CORES = ['#00E5FF', '#3D7BFF', '#9E9E9E', '#F5F5F5', '#F5B942', '#EF6C9C', '#B388FF', '#81C784'];
@@ -271,7 +311,7 @@ function ir(v, sym) {
   render();
 }
 window.voltar = function () { if (fecharFolha()) return true; if (view === 'detalhe') { ir('lista'); return true; } if (view !== 'lista') { ir('lista'); return true; } return false; };
-window.aoVoltarAoApp = function () { if (view === 'alertas') render(); else if (view === 'carteira') atualizarCotacoesCarteira(); else if (view === 'lista') atualizarLista(); };
+window.aoVoltarAoApp = function () { sincronizarAgora(true); if (view === 'alertas') render(); else if (view === 'carteira') atualizarCotacoesCarteira(); else if (view === 'lista') atualizarLista(); };
 function render() {
   if (view === 'lista') telaLista();
   else if (view === 'detalhe') telaDetalhe();
@@ -639,14 +679,14 @@ function criarAlerta() {
     if (q && ((t === 'abaixo' && q.preco <= a.valor) || (t === 'acima' && q.preco >= a.valor)))
       if (!confirm('O preço atual (' + num(q.preco) + ') já atende essa condição — o alerta vai disparar na próxima verificação. Criar mesmo assim?')) return;
   }
-  B.addAlerta(JSON.stringify(a));
+  B.addAlerta(JSON.stringify(a)); agendarSync();
   $('aValor').value = ''; $('aNota').value = ''; $('aIfrNivel').value = '';
   toast('Alerta criado');
   listarAlertasAtivo(); grafico.desenhar();
   if (!B.notificacoesLiberadas()) toast('Atenção: as notificações do app estão desligadas nas configurações do Android.');
 }
-function ativar(id, on) { B.ativarAlerta(id, on); render(); }
-function apagar(id) { if (!confirm('Excluir este alerta?')) return; B.removerAlerta(id); render(); }
+function ativar(id, on) { B.ativarAlerta(id, on); agendarSync(); render(); }
+function apagar(id) { if (!confirm('Excluir este alerta?')) return; B.removerAlerta(id); agendarSync(); render(); }
 
 /* ===================== Tela: alertas ===================== */
 function telaAlertas() {
@@ -693,8 +733,31 @@ function telaMedias() {
         <div class="linha"><label class="sub" style="flex:1">Sobrecomprado (linha de cima)</label><input style="width:90px" type="number" min="51" max="99" value="${ifrCfg.sup}" onchange="setIFR('sup',this.value,51,99)"></div>
         <div class="linha"><label class="sub" style="flex:1">Sobrevendido (linha de baixo)</label><input style="width:90px" type="number" min="1" max="49" value="${ifrCfg.inf}" onchange="setIFR('inf',this.value,1,49)"></div>
       </div></div>
-    <div style="text-align:center"><button class="btn sec peq" onclick="restaurarPadrao()">Voltar ao padrão (MM 9, 21, 50, 80 e IFR 9)</button></div>`;
+    <div style="text-align:center;margin-bottom:12px"><button class="btn sec peq" onclick="restaurarPadrao()">Voltar ao padrão (MM 9, 21, 50, 80 e IFR 9)</button></div>
+    <div class="card"><h2>Sincronizar celular e PC</h2>
+      <div class="sub" style="margin-bottom:10px">Pela sua Planilha Google: ações, carteira, listas, médias e alertas ficam iguais nos dois, e a planilha ganha a aba “Carteira (app)”.</div>
+      <div class="form">
+        <input id="sUrl" placeholder="URL do app da Web (https://script.google.com/…)" value="${esc(B.load('syncUrl') || '')}" autocomplete="off">
+        <input id="sChave" type="password" placeholder="Senha (a mesma do script)" value="${esc(B.load('syncChave') || '')}" autocomplete="off">
+        <div class="linha"><button class="btn" style="flex:1" onclick="salvarSync()">Salvar e sincronizar</button>
+          ${syncConfig() ? '<button class="btn sec" onclick="desligarSync()">Desligar</button>' : ''}</div>
+        <div class="sub" id="syncStatus">${statusSync()}</div>
+        <div class="sub">Configure primeiro no aparelho que já tem a carteira certa; o segundo recebe os dados dele.</div>
+      </div></div>`;
   $('tela').innerHTML = h;
+}
+async function salvarSync() {
+  const u = $('sUrl').value.trim(), c = $('sChave').value.trim();
+  if (!/^https:\/\/script\.google\.com\//.test(u)) { toast('Cole o URL do app da Web (começa com https://script.google.com/).'); return; }
+  if (!c) { toast('Informe a senha.'); return; }
+  B.save('syncUrl', u); B.save('syncChave', c);
+  toast('Sincronizando…');
+  await sincronizarAgora(false);
+  telaMedias();
+}
+function desligarSync() {
+  if (!confirm('Desligar a sincronização neste aparelho? Os dados daqui ficam como estão.')) return;
+  B.save('syncUrl', ''); B.save('syncChave', ''); telaMedias();
 }
 function setIFR(k, v, min, max) {
   const n = parseInt(v, 10);
@@ -743,6 +806,11 @@ function valorItem(it) {
   const p = precoItem(it);
   return p == null ? 0 : p * (+it.qtd || 0);
 }
+const hojeISO = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const dataISOparaBR = d => d.split('-').reverse().join('/');
+const aportes = () => (cart.aportes = cart.aportes || []);
+const totalAportado = (ate) => aportes().filter(a => !ate || a.d.slice(0, 7) <= ate).reduce((s, a) => s + (+a.v || 0), 0);
+const aportadoNoMes = m => aportes().filter(a => a.d.slice(0, 7) === m).reduce((s, a) => s + (+a.v || 0), 0);
 function resumoCarteira() {
   const porCat = {};
   cart.cats.forEach(c => porCat[c.id] = 0);
@@ -761,7 +829,8 @@ async function atualizarCotacoesCarteira() {
   await Promise.all(syms.map(s => buscarCotacao(s).catch(() => { })));
   let mudou = false;
   cart.itens.forEach(it => { if (it.sym && cotacoes[it.sym] && cotacoes[it.sym].preco != null) { it.ult = cotacoes[it.sym].preco; mudou = true; } });
-  if (mudou) { registrarMes(); salvarCart(); }
+  // antes da primeira sincronização não grava, para não passar por cima do que veio do outro aparelho
+  if (mudou && syncPronto) { registrarMes(); salvarCart(); }
   if (view === 'carteira') telaCarteira();
 }
 function mesAtual() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
@@ -780,6 +849,8 @@ function telaCarteira() {
   let h = `<div class="card"><div class="sub">Patrimônio total</div>
     <div class="topo"><span class="grande">${dinheiro(total)}</span>
     ${custo > 0 ? `<span class="${valorComCusto >= custo ? 'alta' : 'baixa'}">${pct((valorComCusto / custo - 1) * 100)} sobre o preço médio</span>` : ''}</div>
+    ${(() => { const ap = totalAportado(); if (!ap) return ''; const l = total - ap;
+      return `<div class="sub" style="margin-top:4px">Aportado ${dinheiro(ap)} · <b class="${l >= 0 ? 'alta' : 'baixa'}">${l >= 0 ? 'Lucro' : 'Prejuízo'} ${dinheiro(Math.abs(l))} (${pct(l / ap * 100)})</b></div>`; })()}
     <div class="linha" style="margin-top:12px;flex-wrap:wrap">
       <button class="btn peq" onclick="formItem()">+ Ativo</button>
       <button class="btn sec peq" onclick="importarB3()">Importar da B3</button>
@@ -812,9 +883,11 @@ function telaCarteira() {
   cart.cats.forEach(c => {
     const itens = cart.itens.filter(i => i.cat === c.id);
     const aberta = cartAberta[c.id] !== false;
+    const comPM = itens.filter(i => i.sym && i.pm > 0), invL = comPM.reduce((s, i) => s + i.pm * i.qtd, 0), valL = comPM.reduce((s, i) => s + valorItem(i), 0);
     h += `<div class="card"><div class="linha" onclick="cartAberta['${c.id}']=${!aberta};gravar('cartAberta',cartAberta);telaCarteira()" style="cursor:pointer">
       <span class="bola" style="background:${c.cor}"></span><h2 style="flex:1;margin:0">${esc(c.nome)} <span class="sub">(${itens.length})</span></h2>
-      <b>${dinheiro(porCat[c.id])}</b><span class="sub" style="margin-left:6px">${aberta ? '▾' : '▸'}</span></div>`;
+      <b>${dinheiro(porCat[c.id])}</b><span class="sub" style="margin-left:6px">${aberta ? '▾' : '▸'}</span></div>
+      ${invL > 0 ? `<div class="sub" style="font-size:12px;margin-top:2px">Investido ${dinheiro(invL)} · <span class="${valL >= invL ? 'alta' : 'baixa'}">${pct((valL / invL - 1) * 100)} (${dinheiro(valL - invL)})</span></div>` : ''}`;
     if (aberta) {
       h += itens.length ? itens.map(it => linhaItem(it, porCat[c.id])).join('') : `<div class="sub" style="margin-top:8px">Nenhum ativo nesta lista.</div>`;
       h += `<button class="btn sec peq" style="margin-top:10px" onclick="formItem(null,'${c.id}')">+ Adicionar em ${esc(c.nome)}</button>`;
@@ -824,35 +897,73 @@ function telaCarteira() {
   const orfaos = cart.itens.filter(i => !catDe(i.cat));
   if (orfaos.length) h += `<div class="card"><h2>Sem lista</h2>${orfaos.map(it => linhaItem(it, 0)).join('')}</div>`;
 
+  // aportes
+  const ap = aportes().slice().sort((a, b) => a.d < b.d ? 1 : -1);
+  h += `<div class="card"><div class="linha"><h2 style="flex:1;margin:0">Aportes</h2><b>${dinheiro(totalAportado())}</b></div>
+    <div class="linha" style="margin-top:10px">
+      <input id="apV" type="number" inputmode="decimal" step="0.01" placeholder="Valor (R$)">
+      <input id="apD" type="date" value="${hojeISO()}" style="flex:none;width:150px">
+      <button class="btn peq" onclick="registrarAporte()">+</button></div>
+    <div class="sub" style="margin:6px 0 4px">Use valor negativo para resgate.</div>
+    ${ap.length ? `<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:2px 8px;font-variant-numeric:tabular-nums;font-size:14px">` +
+      ap.slice(0, cartAberta._aportes ? 999 : 6).map(a => `<span>${dataISOparaBR(a.d)}</span><span style="text-align:right" class="${a.v < 0 ? 'baixa' : ''}">${dinheiro(a.v)}</span>
+        <button class="x" style="font-size:16px" onclick="apagarAporte('${a.id}')">×</button>`).join('') + `</div>` +
+      (ap.length > 6 ? `<button class="btn sec peq" style="margin-top:6px" onclick="cartAberta._aportes=!cartAberta._aportes;telaCarteira()">${cartAberta._aportes ? 'Mostrar menos' : 'Ver todos (' + ap.length + ')'}</button>` : '')
+      : '<div class="sub">Nenhum aporte registrado.</div>'}</div>`;
+
   // evolução mensal
   h += `<div class="card"><h2>Evolução mensal</h2>`;
   if (!cart.hist.length) h += `<div class="sub">O total de cada mês é registrado sozinho sempre que você abre a carteira.</div>`;
   else {
+    const temAp = aportes().length > 0;
     h += `<div class="grafico" style="height:180px;margin-bottom:8px"><canvas id="cvHist"></canvas></div>
-      <div style="display:grid;grid-template-columns:1fr 1.4fr 1fr 1fr;gap:6px 8px;font-size:13px;font-variant-numeric:tabular-nums">
-      <b class="sub">Mês</b><b class="sub" style="text-align:right">Total</b><b class="sub" style="text-align:right">% mês</b><b class="sub" style="text-align:right">% acum.</b>`;
-    const t0 = cart.hist[0].t;
-    h += cart.hist.map((x, i) => {
-      const pm = i ? (x.t / cart.hist[i - 1].t - 1) * 100 : null, pa = (x.t / t0 - 1) * 100;
-      return `<span>${nomeMes(x.m)}</span><span style="text-align:right">${dinheiro(x.t)}</span>
-        <span style="text-align:right" class="${pm == null ? 'sub' : pm >= 0 ? 'alta' : 'baixa'}">${pm == null ? '—' : pct(pm)}</span>
-        <span style="text-align:right" class="${pa >= 0 ? 'alta' : 'baixa'}">${pct(pa)}</span>`;
-    }).reverse().join('');
-    h += `</div><div class="sub" style="margin-top:8px">É a variação do patrimônio: aportes e resgates do mês entram no %.</div>`;
+      <div style="display:grid;grid-template-columns:${temAp ? '0.9fr 1.3fr 1.1fr 0.9fr 0.9fr' : '1fr 1.4fr 1fr 1fr'};gap:6px 8px;font-size:12.5px;font-variant-numeric:tabular-nums">
+      <b class="sub">Mês</b><b class="sub" style="text-align:right">Total</b>${temAp ? '<b class="sub" style="text-align:right">Aportes</b>' : ''}<b class="sub" style="text-align:right">% mês</b><b class="sub" style="text-align:right">% acum.</b>`;
+    const r = rentabilidadeMensal();
+    h += r.map(x => `<span>${nomeMes(x.m)}</span><span style="text-align:right">${dinheiro(x.t)}</span>
+        ${temAp ? `<span style="text-align:right" class="sub">${x.ap ? dinheiro(x.ap) : '—'}</span>` : ''}
+        <span style="text-align:right" class="${x.pm == null ? 'sub' : x.pm >= 0 ? 'alta' : 'baixa'}">${x.pm == null ? '—' : pct(x.pm)}</span>
+        <span style="text-align:right" class="${x.pa == null ? 'sub' : x.pa >= 0 ? 'alta' : 'baixa'}">${x.pa == null ? '—' : pct(x.pa)}</span>`).reverse().join('');
+    h += `</div><div class="sub" style="margin-top:8px">${temAp ? '% mês desconta os aportes do mês; % acumulado é o patrimônio sobre tudo o que foi aportado.' : 'É a variação do patrimônio. Registre seus aportes para o % descontar o dinheiro novo.'}</div>`;
   }
   h += `</div>`;
   $('tela').innerHTML = h;
   simularAporte();
   desenharHist();
 }
+function rentabilidadeMensal() {
+  const temAp = aportes().length > 0, t0 = cart.hist.length ? cart.hist[0].t : 0;
+  return cart.hist.map((x, i) => {
+    const ap = aportadoNoMes(x.m), ant = i ? cart.hist[i - 1].t : null;
+    const pm = ant ? ((x.t - ant - (temAp ? ap : 0)) / ant) * 100 : null;
+    const base = temAp ? totalAportado(x.m) : t0;
+    return { m: x.m, t: x.t, ap, pm, pa: base > 0 ? (x.t / base - 1) * 100 : null };
+  });
+}
+function registrarAporte(v) {
+  const valor = v != null ? v : parseFloat(String($('apV').value).replace(',', '.'));
+  const d = v != null ? hojeISO() : ($('apD').value || hojeISO());
+  if (!valor) { toast('Informe o valor do aporte.'); return; }
+  aportes().push({ id: novoId(), d, v: +valor.toFixed(2) });
+  if (v != null) aporteSim = '';
+  salvarCart(); telaCarteira(); toast('Aporte de ' + dinheiro(valor) + ' registrado');
+}
+function apagarAporte(id) {
+  if (!confirm('Apagar este aporte?')) return;
+  cart.aportes = aportes().filter(a => a.id !== id); salvarCart(); telaCarteira();
+}
 function linhaItem(it, totCat) {
   const v = valorItem(it), p = precoItem(it);
   const res = it.sym && it.pm > 0 && p != null ? (p / it.pm - 1) * 100 : null;
   const q = it.sym ? cotacoes[it.sym] : null;
+  const inv = it.sym && it.pm > 0 ? it.pm * (+it.qtd || 0) : null;
+  const sinal = it.sym && it.alvo > 0 && p != null
+    ? (p <= it.alvo ? `<span class="tag" style="background:#0F3D2A;color:var(--alta);border-color:#19C37D">COMPRA ≤ ${num(it.alvo)}</span>`
+      : `<span class="tag" style="background:#3D1418;color:var(--baixa);border-color:#F23645">ACIMA DO ALVO ${num(it.alvo)}</span>`) : '';
   return `<div class="al" style="cursor:pointer" onclick="formItem('${it.id}')">
-    <div class="t"><b>${esc(it.sym ? rot(it.sym) : it.nome)}</b>
+    <div class="t"><b>${esc(it.sym ? rot(it.sym) : it.nome)}</b>${sinal}
       ${it.sym ? `<span class="sub"> · ${num(+it.qtd || 0, (+it.qtd || 0) % 1 ? 2 : 0)} × ${p == null ? '—' : num(p)}</span>` : '<span class="sub"> · valor manual</span>'}
-      <div class="sub" style="font-size:12px">${totCat ? num(v / totCat * 100, 1) + '% da lista' : ''}${it.sym && it.pm > 0 ? ' · PM ' + num(it.pm) : ''}${q && q.var != null ? ` · <span class="${q.var >= 0 ? 'alta' : 'baixa'}">${pct(q.var)} hoje</span>` : ''}</div></div>
+      <div class="sub" style="font-size:12px">${totCat ? num(v / totCat * 100, 1) + '% da lista' : ''}${it.sym && it.pm > 0 ? ' · PM ' + num(it.pm) + ' · investido ' + dinheiro(inv) : ''}${q && q.var != null ? ` · <span class="${q.var >= 0 ? 'alta' : 'baixa'}">${pct(q.var)} hoje</span>` : ''}</div></div>
     <div style="text-align:right;font-variant-numeric:tabular-nums"><div>${dinheiro(v)}</div>
       ${res != null ? `<div class="${res >= 0 ? 'alta' : 'baixa'}" style="font-size:12px">${pct(res)}</div>` : ''}</div></div>`;
 }
@@ -867,7 +978,8 @@ function simularAporte() {
   let sobra = A - falta.reduce((s, x) => s + x.f * k, 0);
   el.innerHTML = falta.filter(x => x.f * k >= 0.01).map(x => `<div class="linha" style="padding:4px 0"><span class="bola" style="background:${x.c.cor}"></span>
       <span style="flex:1">${esc(x.c.nome)}</span><b>${dinheiro(x.f * k)}</b></div>`).join('') +
-    (sobra > 0.01 ? `<div class="sub">Sobram ${dinheiro(sobra)} — todas as listas já ficam na meta.</div>` : '');
+    (sobra > 0.01 ? `<div class="sub">Sobram ${dinheiro(sobra)} — todas as listas já ficam na meta.</div>` : '') +
+    `<button class="btn sec peq" style="margin-top:8px" onclick="registrarAporte(${A})">Registrar aporte de ${dinheiro(A)} hoje</button>`;
 }
 function desenharHist() {
   const cv = $('cvHist'); if (!cv) return;
@@ -913,6 +1025,8 @@ function formItem(id, catId) {
       <input id="iSym" placeholder="Código: PETR4, HGLG11, AAPL34…" autocapitalize="characters" value="${it && it.sym ? esc(rot(it.sym)) : ''}">
       <div class="linha"><input id="iQtd" type="number" inputmode="decimal" placeholder="Quantidade" value="${it && it.sym ? it.qtd : ''}">
         <input id="iPm" type="number" inputmode="decimal" step="0.01" placeholder="Preço médio (opcional)" value="${it && it.pm ? it.pm : ''}"></div>
+      <input id="iAlvo" type="number" inputmode="decimal" step="0.01" placeholder="Preço-alvo de compra (opcional)" value="${it && it.alvo ? it.alvo : ''}">
+      <div class="sub">Com preço-alvo, o ativo fica marcado “COMPRA” quando o preço está igual ou abaixo dele.</div>
     </div>
     <div id="fM" class="form" style="${manual ? '' : 'display:none'}">
       <input id="iNome" placeholder="Nome (ex.: Conta, CDB, Tesouro Selic)" value="${it && !it.sym ? esc(it.nome) : ''}">
@@ -939,10 +1053,11 @@ async function salvarItem(id) {
     it.nome = nome; it.valor = valor;
   } else {
     const sym = normalizar($('iSym').value), qtd = n($('iQtd').value), pm = n($('iPm').value);
-    if (!sym || !(qtd > 0)) { toast('Informe o código e a quantidade.'); return; }
+    if (!sym || !(qtd >= 0)) { toast('Informe o código e a quantidade (pode ser 0 para só acompanhar).'); return; }
     if (!cotacoes[sym]) { try { await buscarCotacao(sym); } catch (e) { toast('Não encontrei "' + rot(sym) + '".'); return; } }
     delete it.nome; delete it.valor;
-    it.sym = sym; it.qtd = qtd; it.pm = pm > 0 ? pm : null; it.ult = cotacoes[sym].preco;
+    const alvo = n($('iAlvo').value);
+    it.sym = sym; it.qtd = qtd; it.pm = pm > 0 ? pm : null; it.alvo = alvo > 0 ? alvo : null; it.ult = cotacoes[sym].preco;
   }
   if (!id) cart.itens.push(it);
   registrarMes(); salvarCart(); fecharFolha(); telaCarteira(); toast('Salvo');
@@ -1215,13 +1330,15 @@ function simulacao() {
     removerAlerta(id) { mem.alertas = JSON.stringify(JSON.parse(this.alertas()).filter(a => a.id !== id)); return mem.alertas; },
     ativarAlerta(id, on) { const a = JSON.parse(this.alertas()); a.forEach(x => { if (x.id === id) { x.ativo = on; if (on) delete x.disparadoEm; } }); mem.alertas = JSON.stringify(a); return mem.alertas; },
     verificarAgora(id) { setTimeout(() => { mem.ultimaVerificacao = String(Date.now()); window.__cb(id, true, 'Nenhum alerta disparou.'); }, 300); },
-    notificacoesLiberadas: () => true
+    notificacoesLiberadas: () => true,
+    sincronizar(id) { setTimeout(() => window.__cb(id, false, 'sem planilha no modo de teste'), 200); }
   };
 }
 
 /* ===================== Início ===================== */
 ir('lista');
 atualizarLista();
+sincronizarAgora(true);
 </script>
 </body>
 </html>
