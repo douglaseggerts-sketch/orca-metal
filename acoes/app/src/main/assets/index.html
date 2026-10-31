@@ -9,6 +9,17 @@
     --bg: #08090C; --card: #111318; --card2: #191C23; --linha: #252A33;
     --txt: #E8EBF0; --sub: #8A93A3; --alta: #19C37D; --baixa: #F23645;
     --ouro: #2F7BFF; --azul: #4FC3F7;
+    --grade: #222933; --eixo: #6E7887; --cruz: #8B95A5; --swOn: #12284D;
+    --compraBg: #0F3D2A; --vendaBg: #3D1418; --avisoBg: #2A1418; --avisoBorda: #5A2530; --avisoTxt: #F5B8C0;
+    color-scheme: dark;
+  }
+  :root[data-tema="claro"] {
+    --bg: #F3F4F6; --card: #FFFFFF; --card2: #EEF0F3; --linha: #DADDE3;
+    --txt: #15181E; --sub: #5F6878; --alta: #0A9A57; --baixa: #D9283A;
+    --ouro: #2563EB; --azul: #0288D1;
+    --grade: #E5E7EB; --eixo: #7A8494; --cruz: #9AA3B2; --swOn: #DCE7FF;
+    --compraBg: #DDF5E9; --vendaBg: #FBE3E6; --avisoBg: #FDECEE; --avisoBorda: #F3B9C1; --avisoTxt: #8A1C2B;
+    color-scheme: light;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; background: var(--bg); color: var(--txt);
@@ -25,7 +36,7 @@
   nav button { flex: 1; background: none; border: 0; color: var(--sub); padding: 10px 0 12px; font-size: 12px; }
   nav button b { display: block; font-size: 20px; line-height: 1.2; font-weight: 400; }
   nav button.on { color: var(--ouro); }
-  .modo { display:flex; gap:6px; } .modo button { background: var(--card2); border:1px solid var(--linha); color: var(--sub); border-radius:8px; padding:5px 10px; font-size:12px; font-weight:600; } .modo button.on { color:#fff; border-color: var(--ouro); }
+  .modo { display:flex; gap:6px; } .modo button { background: var(--card2); border:1px solid var(--linha); color: var(--sub); border-radius:8px; padding:5px 10px; font-size:12px; font-weight:600; } .modo button.on { color: var(--txt); border-color: var(--ouro); }
   .card { background: var(--card); border: 1px solid var(--linha); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
   .linha { display: flex; gap: 8px; align-items: center; }
   input, select { background: var(--card2); color: var(--txt); border: 1px solid var(--linha); border-radius: 10px;
@@ -64,7 +75,7 @@
   .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--linha); border-radius: 20px;
     padding: 4px 10px; font-size: 13px; background: var(--card2); color: var(--sub); }
   .chip i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-  .chip.on { color: var(--txt); border-color: #4A5361; }
+  .chip.on { color: var(--txt); border-color: var(--cruz); }
   .chip.off i { opacity: .25; }
   .sinal { font-size: 13px; padding: 10px 12px; border-radius: 10px; background: var(--card2); margin-top: 10px; }
   h2 { font-size: 15px; margin: 4px 0 10px; font-weight: 650; }
@@ -77,10 +88,10 @@
   .sw input { opacity: 0; width: 0; height: 0; position: absolute; }
   .sw span { position: absolute; inset: 0; background: var(--card2); border: 1px solid var(--linha); border-radius: 20px; transition: .15s; }
   .sw span::after { content: ""; position: absolute; width: 18px; height: 18px; left: 2px; top: 2px; border-radius: 50%; background: var(--sub); transition: .15s; }
-  .sw input:checked + span { background: #12284D; border-color: var(--ouro); }
+  .sw input:checked + span { background: var(--swOn); border-color: var(--ouro); }
   .sw input:checked + span::after { left: 20px; background: #fff; }
-  .aviso { background: #2A1418; border: 1px solid #5A2530; color: #F5B8C0; border-radius: 12px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; }
-  .toast { position: fixed; left: 16px; right: 16px; bottom: 84px; background: #2A313C; color: var(--txt);
+  .aviso { background: var(--avisoBg); border: 1px solid var(--avisoBorda); color: var(--avisoTxt); border-radius: 12px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; }
+  .toast { position: fixed; left: 16px; right: 16px; bottom: 84px; background: #2A313C; color: #E8EBF0;
     padding: 12px 14px; border-radius: 12px; font-size: 14px; z-index: 9; opacity: 0; transform: translateY(10px);
     transition: .2s; pointer-events: none; }
   .toast.on { opacity: 1; transform: none; }
@@ -96,6 +107,32 @@
   #folha .painel { position: absolute; left: 0; right: 0; bottom: 0; max-height: 88vh; overflow: auto; background: var(--card);
     border-top: 1px solid var(--linha); border-radius: 16px 16px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
   @media (min-width: 760px) { #folha .painel { left: 50%; right: auto; width: 520px; transform: translateX(-50%); bottom: auto; top: 10vh; border-radius: 16px; border: 1px solid var(--linha); } }
+  .abas { display: flex; gap: 4px; overflow-x: auto; margin: -4px -16px 10px; padding: 0 16px; scrollbar-width: none; }
+  .abas::-webkit-scrollbar { display: none; }
+  .abas button { flex: none; background: none; border: 0; color: var(--sub); font-size: 15px; font-weight: 650; padding: 9px 14px; border-radius: 10px; }
+  .abas button.on { background: var(--card2); color: var(--txt); }
+  .abas .mais { margin-left: auto; font-size: 20px; padding: 4px 12px; }
+  .barra-lista { display: flex; gap: 8px; margin-bottom: 8px; }
+  .barra-lista select { width: auto; flex: 1; padding: 8px 6px; font-size: 13.5px; min-width: 0; }
+  .barra-lista > .btn { flex: none; padding: 6px 10px; }
+  .barra-lista .ordem { display: flex; flex: 1.35; border: 1px solid var(--ouro); border-radius: 10px; overflow: hidden; }
+  .barra-lista .ordem button { background: var(--card2); border: 0; color: var(--ouro); font-size: 16px; padding: 0 10px; }
+  .barra-lista .ordem select { border: 0; border-radius: 0; }
+  .cotacoes { margin: 0 -16px; }
+  .cot { display: grid; grid-template-columns: 1.25fr 1fr 1fr; align-items: center; padding: 9px 16px 9px 12px; border-left: 4px solid transparent;
+    border-bottom: 1px solid var(--linha); cursor: pointer; user-select: none; -webkit-user-select: none; }
+  .cot:active { background: var(--card2); }
+  .cot > div { display: flex; flex-direction: column; min-width: 0; font-variant-numeric: tabular-nums; }
+  .cot .c1 { align-items: flex-start; } .cot .c2 { align-items: center; } .cot .c3 { align-items: flex-end; }
+  .cot b { font-size: 17px; }
+  .cot .tk2 { font-weight: 800; font-size: 17px; padding: 2px 8px; margin-left: -8px; border-radius: 6px; letter-spacing: .3px; }
+  .cot .nm { color: var(--sub); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; margin-top: 2px; }
+  .cot .c4 { grid-column: 1 / -1; flex-direction: row; align-items: center; font-size: 11.5px; color: var(--sub); margin-top: 4px; }
+  .grade-ind { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+  .ind { background: var(--card2); border: 1px solid var(--linha); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .ind .sub { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ind b { font-size: 15px; font-variant-numeric: tabular-nums; }
+  .ind.clic { cursor: pointer; border-color: var(--cruz); }
   input[type=color] { padding: 2px; height: 42px; width: 52px; flex: none; }
 </style>
 </head>
@@ -107,7 +144,7 @@
 </header>
 <main id="tela"></main>
 <nav>
-  <button data-v="lista" onclick="ir('lista')"><b>📈</b>Ações</button>
+  <button data-v="lista" onclick="ir('lista')"><b>📈</b>Cotações</button>
   <button data-v="carteira" onclick="ir('carteira')"><b>💼</b>Carteira</button>
   <button data-v="alertas" onclick="ir('alertas')"><b>🔔</b>Alertas</button>
   <button data-v="medias" onclick="ir('medias')"><b>〰️</b>Indicadores</button>
@@ -134,8 +171,27 @@ function ler(chave, padrao) {
 }
 function alertas() { try { return JSON.parse(B.alertas()); } catch (e) { return []; } }
 
+/* ===================== Tema ===================== */
+var tema = ler('tema', 'auto');
+function sistemaEscuro() {
+  try { return B.temaSistemaEscuro ? !!B.temaSistemaEscuro() : matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) { return true; }
+}
+function aplicarTema() {
+  const escuro = tema === 'escuro' || (tema === 'auto' && sistemaEscuro());
+  document.documentElement.dataset.tema = escuro ? 'escuro' : 'claro';
+  try { B.barras && B.barras(escuro ? '#08090C' : '#F3F4F6', !escuro); } catch (e) { }
+  try {   // na abertura do app as telas ainda não existem
+    if (view === 'detalhe') grafico.desenhar();
+    if (view === 'carteira') desenharHist();
+  } catch (e) { }
+}
+window.aplicarTema = aplicarTema;
+try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => tema === 'auto' && aplicarTema()); } catch (e) { }
+function mudarTema(t) { tema = t; gravar('tema', t); aplicarTema(); if (view === 'medias') telaMedias(); }
+aplicarTema();
+
 /* ===================== Sincronização (Planilha Google) ===================== */
-var SINC = ['lista', 'medias', 'ifr', 'carteira'], syncPronto = false, syncTimer = null;
+var SINC = ['lista', 'medias', 'ifr', 'carteira', 'fundHist'], syncPronto = false, syncTimer = null;
 function gravar(chave, v) { B.save(chave, JSON.stringify(v)); if (SINC.includes(chave)) agendarSync(); }
 function syncConfig() { return !!(B.sincronizar && B.load('syncUrl') && B.load('syncChave')); }
 function agendarSync() {
@@ -159,6 +215,7 @@ function recarregarEstado() {
   lista = ler('lista', lista); medias = ler('medias', medias);
   ifrCfg = Object.assign({ p: 9, mm: 9, sup: 70, inf: 30, on: true }, ler('ifr', {}));
   cart = ler('carteira', null) || cart;
+  fundHist = ler('fundHist', {});
 }
 function aplicarRemoto() {
   recarregarEstado();
@@ -279,7 +336,7 @@ function interpretar(txt) {
     pts.push({ t: ts[i], c: c[i], o: ab, h: hi[i] != null ? hi[i] : Math.max(ab, c[i]), l: lo[i] != null ? lo[i] : Math.min(ab, c[i]), v: vol[i] || 0 });
   }
   const m = r.meta;
-  return { pts, preco: m.regularMarketPrice, moeda: m.currency || 'BRL', nome: m.shortName || m.longName || '' };
+  return { pts, preco: m.regularMarketPrice, moeda: m.currency || 'BRL', nome: m.shortName || m.longName || '', hora: m.regularMarketTime || null, volume: m.regularMarketVolume || null };
 }
 async function buscarCotacao(sym) {
   const d = interpretar(await chamar('fetch', URL_Y + encodeURIComponent(sym) + '?range=5d&interval=1d'));
@@ -290,7 +347,8 @@ async function buscarCotacao(sym) {
   let anterior = p.length >= 2 ? p[p.length - 2].c : null;
   // se o último ponto não for de hoje e o preço já mudou, a variação é contra o último fechamento
   if (p.length && Math.abs(p[p.length - 1].c - d.preco) > 1e-9 && (Date.now() / 1000 - p[p.length - 1].t) > 86400) anterior = p[p.length - 1].c;
-  const q = { preco: d.preco, moeda: d.moeda, nome: d.nome, var: anterior ? (d.preco / anterior - 1) * 100 : null };
+  const q = { preco: d.preco, moeda: d.moeda, nome: d.nome, var: anterior ? (d.preco / anterior - 1) * 100 : null, hora: d.hora,
+    volume: d.volume != null ? d.volume : (p.length ? p[p.length - 1].v : null) };
   cotacoes[sym] = q;
   return q;
 }
@@ -353,53 +411,112 @@ function gruposLista() {
   g.push({ id: '_sem', nome: 'SEM LISTA', cor: '#5A6372' });
   return g;
 }
+let filtroLista = ler('filtroLista', 'todos'), ordem = ler('ordem', { k: 'var', desc: true });
+const FILTROS = { todos: 'Todos', alta: 'Em alta', baixa: 'Em baixa', posicao: 'Com posição', alerta: 'Com alerta', alvo: 'Abaixo do alvo' };
+const ORDENS = { var: 'Variação', cod: 'Código', preco: 'Preço', volume: 'Volume', dy: 'D.Y', pl: 'P/L', pvp: 'P/VP' };
+const fundDe = s => fundMem[s] || (fundCache[s] || {}).d || null;
+function volFin(s) { const q = cotacoes[s]; return q && q.volume && q.preco ? q.volume * q.preco : null; }
+const abrev = v => v == null ? '' : v >= 1e9 ? num(v / 1e9, 2) + ' bi' : v >= 1e6 ? num(v / 1e6, 1) + ' mi' : v >= 1e3 ? num(v / 1e3, 0) + ' mil' : num(v, 0);
+function horaCot(q) { return q && q.hora ? new Date(q.hora * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''; }
 function telaLista() {
-  $('titulo').textContent = 'Ações';
+  $('titulo').textContent = 'Cotações';
   const syms = todosSimbolos(), grupos = gruposLista();
   if (listaSel !== 'todas' && !grupos.some(g => g.id === listaSel)) listaSel = 'todas';
-  const conta = id => syms.filter(s => listaDe(s) === id).length;
-  const destino = listaSel === 'todas' ? (grupos[0] ? grupos[0].id : '_sem') : listaSel;
-  let h = `<div class="chips" style="margin:0 0 12px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px">
-      <span class="chip ${listaSel === 'todas' ? 'on' : ''}" style="flex:none;${listaSel === 'todas' ? 'border-color:var(--ouro);color:#fff' : ''}" onclick="selLista('todas')">Todas (${syms.length})</span>
-      ${grupos.filter(g => g.id !== '_sem' || conta('_sem')).map(g => `<span class="chip ${listaSel === g.id ? 'on' : ''}" style="flex:none;${listaSel === g.id ? 'border-color:' + g.cor + ';color:#fff' : ''}" onclick="selLista('${g.id}')"><i style="background:${g.cor}"></i>${esc(g.nome)} (${conta(g.id)})</span>`).join('')}
-      <span class="chip" style="flex:none" onclick="editarListas()">✎ Listas</span></div>
-    <div class="card"><div class="linha">
-      <input id="novo" placeholder="Código: PETR4, HGLG11, AAPL…" autocapitalize="characters" autocomplete="off" onkeydown="if(event.key==='Enter')adicionar()">
-      <button class="btn" onclick="adicionar()">Adicionar</button></div>
-      <div class="linha" style="margin-top:8px"><span class="sub">na lista</span>
-        <select id="novoLista" style="flex:1">${grupos.map(g => `<option value="${g.id}" ${g.id === destino ? 'selected' : ''}>${esc(g.nome)}</option>`).join('')}</select></div></div>`;
-  const mostrar = listaSel === 'todas' ? grupos : grupos.filter(g => g.id === listaSel);
-  let algum = false;
-  mostrar.forEach(g => {
-    const ss = syms.filter(s => listaDe(s) === g.id);
-    if (!ss.length) { if (listaSel !== 'todas') h += `<div class="vazio">Nenhuma ação em ${esc(g.nome)}. Digite um código acima.</div>`; return; }
-    algum = true;
-    if (listaSel === 'todas') h += `<div class="linha" style="margin:14px 2px 8px"><span class="bola" style="background:${g.cor}"></span><b style="font-size:13px;letter-spacing:.5px">${esc(g.nome)}</b><span class="sub">· ${ss.length}</span></div>`;
-    h += ss.map(s => linhaAcao(s, g)).join('');
+  const abas = [{ id: 'todas', nome: 'TODAS' }].concat(grupos.filter(g => g.id !== '_sem' || syms.some(s => listaDe(s) === '_sem')));
+  const comAlerta = new Set(alertas().filter(a => a.ativo && !a.disparadoEm).map(a => a.sym));
+  let ss = syms.filter(s => listaSel === 'todas' || listaDe(s) === listaSel).filter(s => {
+    const q = cotacoes[s], it = itemDe(s), p = q && q.preco;
+    if (filtroLista === 'alta') return q && q.var > 0;
+    if (filtroLista === 'baixa') return q && q.var < 0;
+    if (filtroLista === 'posicao') return it && it.qtd > 0;
+    if (filtroLista === 'alerta') return comAlerta.has(s);
+    if (filtroLista === 'alvo') return it && it.alvo > 0 && p != null && p <= it.alvo;
+    return true;
   });
-  if (!algum && listaSel === 'todas') h += `<div class="vazio">Nenhuma ação. Digite um código acima.</div>`;
+  const val = s => {
+    const q = cotacoes[s] || {}, f = fundDe(s) || {};
+    return { var: q.var, cod: rot(s), preco: q.preco, volume: volFin(s), dy: f.dy, pl: f.pl, pvp: f.pvp }[ordem.k];
+  };
+  ss.sort((a, b) => {
+    const x = val(a), y = val(b);
+    if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
+    const r = typeof x === 'string' ? x.localeCompare(y) : x - y;
+    return ordem.desc ? -r : r;
+  });
+  let h = `<div class="abas">${abas.map(a => `<button class="${listaSel === a.id ? 'on' : ''}" onclick="selLista('${a.id}')">${esc(a.nome)}</button>`).join('')}
+      <button class="mais" onclick="editarListas()" aria-label="Editar listas">⋯</button></div>
+    <div class="barra-lista">
+      <button class="btn sec peq" onclick="formAdicionar()"><span style="color:var(--ouro);font-size:16px">＋</span> Adicionar</button>
+      <select onchange="filtroLista=this.value;gravar('filtroLista',filtroLista);telaLista()">${Object.entries(FILTROS).map(([k, n]) => `<option value="${k}" ${k === filtroLista ? 'selected' : ''}>${n}</option>`).join('')}</select>
+      <div class="ordem"><button onclick="ordem.desc=!ordem.desc;gravar('ordem',ordem);telaLista()" aria-label="Inverter ordem">${ordem.desc ? '↓' : '↑'}</button>
+        <select onchange="ordem.k=this.value;gravar('ordem',ordem);telaLista()">${Object.entries(ORDENS).map(([k, n]) => `<option value="${k}" ${k === ordem.k ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+    </div>`;
+  if (!ss.length) h += `<div class="vazio">${syms.length ? 'Nenhuma ação com esse filtro.' : 'Nenhuma ação. Toque em “Adicionar”.'}</div>`;
+  h += `<div class="cotacoes">${ss.map(s => linhaAcao(s)).join('')}</div>`;
   const ult = ler('ultimaVerificacao', null);
-  if (ult) h += `<div class="sub" style="text-align:center;margin-top:10px">Última verificação de alertas: ${new Date(+ult).toLocaleString('pt-BR')}</div>`;
+  if (ult) h += `<div class="sub" style="text-align:center;margin-top:10px;font-size:12px">Toque e segure numa ação para mover ou remover · Alertas conferidos em ${new Date(+ult).toLocaleString('pt-BR')}</div>`;
   $('tela').innerHTML = h;
+  ligarSegurar();
 }
-function linhaAcao(s, g) {
-  const q = cotacoes[s], it = itemDe(s);
-  const cl = q && q.var != null ? (q.var >= 0 ? 'alta' : 'baixa') : 'sub';
-  const p = q && q.preco != null ? q.preco : it && it.ult;
-  const sinal = it && it.alvo > 0 && p != null ? (p <= it.alvo ? `<span class="tag" style="background:#0F3D2A;color:var(--alta);border-color:#19C37D">COMPRA</span>` : '') : '';
-  const pos = it && it.qtd > 0 ? ` · ${num(+it.qtd, it.qtd % 1 ? 2 : 0)} un` : '';
-  return `<div class="ativo" onclick="ir('detalhe','${esc(s)}')">
-    <div class="nome"><div class="tk">${esc(rot(s))}<span class="tag" style="cursor:pointer;border-color:${g.cor}" onclick="event.stopPropagation();moverAcao('${esc(s)}')">${esc(g.nome)} ▾</span>${sinal}</div>
-      <div class="ds">${q && q.nome ? esc(q.nome) : (q && q.erro ? 'sem dados' : 'carregando…')}${pos}</div></div>
-    <div class="pr"><div>${p != null ? dinheiro(p, q && q.moeda) : '—'}</div>
-      <div class="${cl}" style="font-size:13px">${q && q.var != null ? pct(q.var) : ''}</div></div>
-    <button class="x" onclick="event.stopPropagation();remover('${esc(s)}')" aria-label="Remover">×</button></div>`;
+function linhaAcao(s) {
+  const q = cotacoes[s] || {}, it = itemDe(s), g = gruposLista().find(x => x.id === listaDe(s)) || {};
+  const sobe = q.var == null ? null : q.var >= 0, cor = sobe == null ? 'var(--txt)' : sobe ? 'var(--alta)' : 'var(--baixa)';
+  const posicao = it && it.qtd > 0, f = fundDe(s);
+  const p = q.preco != null ? q.preco : it && it.ult;
+  const compra = it && it.alvo > 0 && p != null && p <= it.alvo;
+  const ind = f ? [f.dy != null ? 'DY ' + num(f.dy, 1) + '%' : '', f.pl != null ? 'P/L ' + num(f.pl, 1) : '', f.pvp != null ? 'P/VP ' + num(f.pvp) : ''].filter(Boolean).join(' · ') : '';
+  return `<div class="cot" data-sym="${esc(s)}" onclick="ir('detalhe','${esc(s)}')" style="border-left-color:${listaSel === 'todas' && g.cor ? g.cor : 'transparent'}">
+    <div class="c1"><span class="tk2 ${posicao ? 'pos' : ''}" style="${posicao ? 'background:' + cor + ';color:#fff' : 'color:' + cor}">${esc(rot(s))}</span>
+      <span class="nm">${q.nome ? esc(q.nome) : q.erro ? 'sem dados' : '…'}</span></div>
+    <div class="c2"><b>${p != null ? num(p) : '—'}</b><span class="nm">${horaCot(q)}</span></div>
+    <div class="c3"><b style="color:${cor}">${q.var != null ? pct(q.var) : ''}</b><span class="nm">${abrev(volFin(s))}</span></div>
+    ${ind || compra ? `<div class="c4">${compra ? '<span class="tag" style="background:var(--compraBg);color:var(--alta);border-color:var(--alta);margin:0 6px 0 0">COMPRA</span>' : ''}${ind}</div>` : ''}
+  </div>`;
+}
+// tocar e segurar (ou botão direito no PC) abre as opções da ação
+function ligarSegurar() {
+  document.querySelectorAll('.cot').forEach(el => {
+    let tm = null, segurou = false;
+    const s = el.dataset.sym;
+    el.addEventListener('contextmenu', e => { e.preventDefault(); opcoesAcao(s); });
+    el.addEventListener('touchstart', () => { segurou = false; tm = setTimeout(() => { segurou = true; opcoesAcao(s); }, 550); }, { passive: true });
+    ['touchend', 'touchmove', 'touchcancel'].forEach(t => el.addEventListener(t, () => clearTimeout(tm), { passive: true }));
+    el.addEventListener('click', e => { if (segurou) { e.stopPropagation(); e.preventDefault(); segurou = false; } }, true);
+  });
+}
+function opcoesAcao(s) {
+  abrirFolha(`<h2>${esc(rot(s))}</h2>
+    <button class="btn sec" style="width:100%;margin-bottom:8px" onclick="fecharFolha();ir('detalhe','${esc(s)}')">Abrir gráfico e indicadores</button>
+    <button class="btn sec" style="width:100%;margin-bottom:8px" onclick="moverAcao('${esc(s)}')">Mover para outra lista</button>
+    <button class="btn sec" style="width:100%;margin-bottom:8px;color:var(--baixa)" onclick="fecharFolha();remover('${esc(s)}')">Remover</button>
+    <button class="btn sec" style="width:100%" onclick="fecharFolha()">Cancelar</button>`);
+}
+function formAdicionar() {
+  const grupos = gruposLista(), destino = listaSel === 'todas' ? (grupos[0] ? grupos[0].id : '_sem') : listaSel;
+  abrirFolha(`<h2>Adicionar ação</h2><div class="form">
+    <input id="novo" placeholder="Código: PETR4, HGLG11, AAPL…" autocapitalize="characters" autocomplete="off" onkeydown="if(event.key==='Enter')adicionar()">
+    <select id="novoLista">${grupos.map(g => `<option value="${g.id}" ${g.id === destino ? 'selected' : ''}>Lista ${esc(g.nome)}</option>`).join('')}</select>
+    <div class="sub">B3 pelo código (PETR4, HGLG11, BOVA11). EUA pelo ticker (AAPL).</div>
+    <div class="linha"><button class="btn" style="flex:1" onclick="adicionar()">Adicionar</button><button class="btn sec" onclick="fecharFolha()">Fechar</button></div></div>`);
+  setTimeout(() => $('novo') && $('novo').focus(), 100);
 }
 function selLista(id) { listaSel = id; gravar('listaSel', id); telaLista(); }
 async function atualizarLista() {
   if (view === 'lista') telaLista();
   await Promise.all(todosSimbolos().map(s => buscarCotacao(s).catch(() => { cotacoes[s] = Object.assign(cotacoes[s] || {}, { erro: true }); })));
   if (view === 'lista') telaLista();
+  carregarIndicadoresLista();
+}
+let carregandoInd = false;
+async function carregarIndicadoresLista() {   // um por vez, para não sobrecarregar o Fundamentus
+  if (carregandoInd) return; carregandoInd = true;
+  try {
+    for (const s of todosSimbolos().filter(ehB3)) {
+      if (fundMem[s]) continue;
+      try { await buscarFund(s); } catch (e) { }
+      if (view === 'lista') telaLista();
+    }
+  } finally { carregandoInd = false; }
 }
 // coloca a ação numa lista (ou tira de todas, com "_sem")
 function porNaLista(s, cat) {
@@ -426,10 +543,12 @@ async function adicionar() {
   try {
     await buscarCotacao(s);
     if (porNaLista(s, cat)) toast(rot(s) + ' adicionada em ' + (catDe(cat) ? catDe(cat).nome : 'Sem lista'));
+    $('novo').value = '';
   } catch (e) {
     toast('Não encontrei "' + rot(s) + '". Confira o código.');
   }
-  telaLista();
+  if ($('novo')) { $('novo').disabled = false; $('novo').focus(); }
+  telaLista(); carregarIndicadoresLista();
 }
 function moverAcao(s) {
   const atualL = listaDe(s);
@@ -464,6 +583,7 @@ async function telaDetalhe() {
     <div class="grafico" id="graf"><div class="carregando">Carregando…</div></div>
     <div class="chips" id="chips"></div>
     <div id="sinal"></div>
+    <div id="fundCard"></div>
     <div class="card" style="margin-top:14px">
       <h2>Alertas de ${esc(rot(s))}</h2>
       <div id="alLista"></div>
@@ -495,6 +615,7 @@ async function telaDetalhe() {
       </div>
     </div>`;
   listarAlertasAtivo();
+  cardIndicadores(s);
   buscarCotacao(s).then(q => {
     if (view !== 'detalhe' || atual !== s) return;
     $('dPreco').textContent = dinheiro(q.preco, q.moeda);
@@ -533,7 +654,7 @@ async function desenharDetalhe() {
   if (!$('graf').querySelector('canvas')) { $('graf').innerHTML = '<canvas id="cv"></canvas>'; ligarToque(); }
   grafico.desenhar();
   // chips
-  $('chips').innerHTML = medias.map((m, i) => `<span class="chip ${m.on ? 'on' : 'off'}" onclick="alternarMM(${i})"><i style="background:${m.c}"></i>${nomeMM(m)}</span>`).join('') +
+  $('chips').innerHTML = medias.map((m, i) => `<span class="chip ${m.on ? 'on' : 'off'}" onclick="alternarMM(${i})"><i style="background:${corLinha(m.c)}"></i>${nomeMM(m)}</span>`).join('') +
     `<span class="chip ${ifrCfg.on ? 'on' : 'off'}" onclick="alternarIFR()"><i style="background:#F23645"></i>IFR(${ifrCfg.p})</span>`;
   // sinal
   let txt = '';
@@ -592,8 +713,8 @@ const grafico = {
     g.font = '11px system-ui, sans-serif'; g.textBaseline = 'middle';
     const passo = niceStep((hi - lo) / 5);
     for (let y = Math.ceil(lo / passo) * passo; y <= hi && Y(y) <= baseP; y += passo) {
-      g.strokeStyle = '#222933'; g.lineWidth = 1; g.beginPath(); g.moveTo(padL, Y(y)); g.lineTo(W - padR, Y(y)); g.stroke();
-      g.fillStyle = '#6E7887'; g.fillText(num(y, passo < 1 ? 2 : 0), W - padR + 6, Y(y));
+      g.strokeStyle = C('grade'); g.lineWidth = 1; g.beginPath(); g.moveTo(padL, Y(y)); g.lineTo(W - padR, Y(y)); g.stroke();
+      g.fillStyle = C('eixo'); g.fillText(num(y, passo < 1 ? 2 : 0), W - padR + 6, Y(y));
     }
     // datas
     g.textBaseline = 'alphabetic'; g.textAlign = 'center';
@@ -601,7 +722,7 @@ const grafico = {
     for (let k = 0; k < nd; k++) {
       const i = Math.round((pts.length - 1) * (k + 0.5) / nd);
       const d = new Date(pts[i].t * 1000);
-      g.fillStyle = '#6E7887';
+      g.fillStyle = C('eixo');
       g.fillText(d.toLocaleDateString('pt-BR', f !== 'd' ? { month: 'short', year: '2-digit' } : { day: '2-digit', month: 'short' }), X(i), H - 6);
     }
     g.textAlign = 'left';
@@ -643,7 +764,7 @@ const grafico = {
     series.forEach(s => {
       g.beginPath(); let on = false;
       s.val.forEach((x, i) => { if (x == null) { on = false; return; } on ? g.lineTo(X(i), Y(x)) : g.moveTo(X(i), Y(x)); on = true; });
-      g.strokeStyle = s.m.c; g.lineWidth = 1.5; g.stroke();
+      g.strokeStyle = corLinha(s.m.c); g.lineWidth = 1.5; g.stroke();
     });
     // último preço
     const ult = pts[pts.length - 1].c;
@@ -653,39 +774,50 @@ const grafico = {
     if (R) {
       const YI = v => ifrTop + ifrH * (1 - v / 100);
       g.fillStyle = 'rgba(138,147,163,.07)'; g.fillRect(padL, YI(ifrCfg.sup), W - padL - padR, YI(ifrCfg.inf) - YI(ifrCfg.sup));
-      g.strokeStyle = '#2A313C'; g.lineWidth = 1; g.strokeRect(padL + .5, ifrTop + .5, W - padL - padR - 1, ifrH - 1);
-      g.setLineDash([4, 4]); g.strokeStyle = '#4A5361';
+      g.strokeStyle = C('linha'); g.lineWidth = 1; g.strokeRect(padL + .5, ifrTop + .5, W - padL - padR - 1, ifrH - 1);
+      g.setLineDash([4, 4]); g.strokeStyle = C('cruz');
       [ifrCfg.sup, ifrCfg.inf].forEach(n => { g.beginPath(); g.moveTo(padL, YI(n)); g.lineTo(W - padR, YI(n)); g.stroke(); });
       g.setLineDash([]);
-      g.font = '11px system-ui, sans-serif'; g.textBaseline = 'middle'; g.fillStyle = '#6E7887';
+      g.font = '11px system-ui, sans-serif'; g.textBaseline = 'middle'; g.fillStyle = C('eixo');
       [ifrCfg.sup, ifrCfg.inf].forEach(n => g.fillText(num(n, 0), W - padR + 6, YI(n)));
       const linha = (arr, cor, lw) => {
         g.beginPath(); let on = false;
         arr.forEach((x, i) => { if (x == null) { on = false; return; } on ? g.lineTo(X(i), YI(x)) : g.moveTo(X(i), YI(x)); on = true; });
         g.strokeStyle = cor; g.lineWidth = lw; g.stroke();
       };
-      linha(R.mm, '#00E5FF', 1.2);
+      linha(R.mm, corLinha('#00E5FF'), 1.2);
       linha(R.val, '#F23645', 1.6);
       const ru = R.val[R.val.length - 1];
       if (ru != null) {
         g.fillStyle = '#F23645'; g.fillRect(W - padR + 2, YI(ru) - 8, padR - 2, 16);
         g.fillStyle = '#fff'; g.font = 'bold 11px system-ui, sans-serif'; g.fillText(num(ru), W - padR + 6, YI(ru));
       }
-      g.font = '11px system-ui, sans-serif'; g.fillStyle = '#8A93A3'; g.textBaseline = 'top';
+      g.font = '11px system-ui, sans-serif'; g.fillStyle = C('sub'); g.textBaseline = 'top';
       g.fillText(`IFR (${ifrCfg.p})  ·  MM ${ifrCfg.mm}`, padL + 6, ifrTop + 4);
     }
     // toque / legenda (sem toque mostra o último candle, como no Profit)
     const i = this.toque != null ? this.toque : pts.length - 1, p = pts[i];
     if (this.toque != null) {
-      g.strokeStyle = '#8B95A5'; g.lineWidth = 1; g.setLineDash([3, 3]);
+      g.strokeStyle = C('cruz'); g.lineWidth = 1; g.setLineDash([3, 3]);
       g.beginPath(); g.moveTo(X(i), padT); g.lineTo(X(i), H - padB); g.stroke(); g.setLineDash([]);
-      g.fillStyle = '#E6EAF0'; g.beginPath(); g.arc(X(i), Y(p.c), 4, 0, 7); g.fill();
+      g.fillStyle = C('txt'); g.beginPath(); g.arc(X(i), Y(p.c), 4, 0, 7); g.fill();
     }
     $('info').innerHTML = `<b style="color:var(--txt)">${dataBR(p.t)}</b> A ${num(p.o)} M ${num(p.h)} m ${num(p.l)} F <b style="color:${p.c >= p.o ? 'var(--alta)' : 'var(--baixa)'}">${num(p.c)}</b><br>` +
-      series.map(s => s.val[i] != null ? `<span style="color:${s.m.c}">${nomeMM(s.m)} ${num(s.val[i])}</span>` : '').join(' ') +
+      series.map(s => s.val[i] != null ? `<span style="color:${corLinha(s.m.c)}">${nomeMM(s.m)} ${num(s.val[i])}</span>` : '').join(' ') +
       (R && R.val[i] != null ? ` <span style="color:#F23645">IFR ${num(R.val[i], 1)}</span>` : '');
   }
 };
+// cores do tema para os gráficos
+const C = n => getComputedStyle(document.documentElement).getPropertyValue('--' + n).trim();
+const temaClaro = () => document.documentElement.dataset.tema === 'claro';
+function corLinha(c) {   // no tema claro, escurece linhas muito claras (ex.: MM80 branca)
+  if (!temaClaro() || !/^#[0-9a-f]{6}$/i.test(c)) return c;
+  const v = [1, 3, 5].map(i => parseInt(c.substr(i, 2), 16));
+  const lum = (0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]) / 255;
+  if (lum < 0.6) return c;
+  const f = lum > 0.85 ? 0.15 : 0.6;
+  return '#' + v.map(x => Math.round(x * f).toString(16).padStart(2, '0')).join('');
+}
 function niceStep(x) { const e = Math.pow(10, Math.floor(Math.log10(x))), f = x / e; return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * e; }
 function ligarToque() {
   const el = $('graf');
@@ -785,7 +917,9 @@ async function verificarAgora() {
 /* ===================== Tela: médias ===================== */
 function telaMedias() {
   $('titulo').textContent = 'Indicadores';
-  let h = `<div class="card"><h2>Suas médias</h2>` + (medias.length ? medias.map((m, i) => `
+  let h = `<div class="card"><div class="linha"><h2 style="flex:1;margin:0">Aparência</h2>
+      <div class="modo">${[['auto', 'Automático'], ['escuro', 'Escuro'], ['claro', 'Claro']].map(([k, n]) => `<button class="${tema === k ? 'on' : ''}" onclick="mudarTema('${k}')">${n}</button>`).join('')}</div></div>
+      <div class="sub" style="margin-top:6px">Automático segue o tema do ${PC ? 'Windows' : 'celular'}.</div></div>` + `<div class="card"><h2>Suas médias</h2>` + (medias.length ? medias.map((m, i) => `
     <div class="al"><span class="bola" style="background:${m.c}"></span>
       <div class="t"><b>${nomeMM(m)}</b> <span class="sub">· ${m.p} períodos · ${m.t === 'EMA' ? 'exponencial' : 'simples'}</span></div>
       <label class="sw"><input type="checkbox" ${m.on ? 'checked' : ''} onchange="medias[${i}].on=this.checked;gravar('medias',medias)"><span></span></label>
@@ -808,6 +942,11 @@ function telaMedias() {
         <div class="linha"><label class="sub" style="flex:1">Sobrevendido (linha de baixo)</label><input style="width:90px" type="number" min="1" max="49" value="${ifrCfg.inf}" onchange="setIFR('inf',this.value,1,49)"></div>
       </div></div>
     <div style="text-align:center;margin-bottom:12px"><button class="btn sec peq" onclick="restaurarPadrao()">Voltar ao padrão (MM 9, 21, 50, 80 e IFR 9)</button></div>
+    <div class="card"><h2>Fontes de dados</h2>
+      <div class="sub" style="margin-bottom:10px">Cotações: Yahoo Finance. Indicadores e proventos de ações: Fundamentus. FIIs e histórico trimestral de P/L e P/VP: Bolsai (cole sua chave; grátis dá os FIIs, o plano Pro dá o histórico).</div>
+      <div class="form"><input id="bKey" type="password" placeholder="Chave da Bolsai (sk_…)" value="${esc(B.load('bolsaiChave') || '')}" autocomplete="off">
+        <div class="linha"><button class="btn" style="flex:1" onclick="salvarBolsai()">Salvar e testar</button></div>
+        <div class="sub" id="bStatus">${chaveBolsai() ? 'Chave salva neste aparelho.' : 'Sem chave: FIIs ficam só com DY dos proventos.'}</div></div></div>
     <div class="card"><h2>Sincronizar celular e PC</h2>
       <div class="sub" style="margin-bottom:10px">Pela sua Planilha Google: ações, carteira, listas, médias e alertas ficam iguais nos dois, e a planilha ganha a aba “Carteira (app)”.</div>
       <div class="form">
@@ -819,6 +958,15 @@ function telaMedias() {
         <div class="sub">Configure primeiro no aparelho que já tem a carteira certa; o segundo recebe os dados dele.</div>
       </div></div>`;
   $('tela').innerHTML = h;
+}
+async function salvarBolsai() {
+  const k = $('bKey').value.trim();
+  B.save('bolsaiChave', k);
+  Object.keys(fundMem).forEach(x => delete fundMem[x]); fundCache = {}; gravar('fundCache', fundCache);
+  if (!k) { $('bStatus').textContent = 'Chave removida.'; return; }
+  $('bStatus').textContent = 'Testando…';
+  try { const j = await bolsai('fiis/HGLG11'); $('bStatus').innerHTML = '<span class="alta">Chave funcionando</span> (HGLG11: P/VP ' + num(j.pvp) + ').'; }
+  catch (e) { $('bStatus').innerHTML = '<span class="baixa">Não funcionou:</span> ' + esc(e.message).slice(0, 120); }
 }
 async function salvarSync() {
   const u = $('sUrl').value.trim(), c = $('sChave').value.trim();
@@ -919,7 +1067,7 @@ const nomeMes = m => { const [a, b] = m.split('-'); return b + '/' + a.slice(2);
 function telaCarteira() {
   $('titulo').textContent = 'Carteira';
   const { porCat, total, custo, valorComCusto } = resumoCarteira();
-  const somaMetas = cart.cats.reduce((s, c) => s + (+c.meta || 0), 0);
+  if (cart.cats.length && Math.abs(cart.cats.reduce((s, c) => s + (+c.meta || 0), 0) - 100) > 0.001) { ajustarMetas(); if (syncPronto) salvarCart(); }
   let h = `<div class="card"><div class="sub">Patrimônio total</div>
     <div class="topo"><span class="grande">${dinheiro(total)}</span>
     ${custo > 0 ? `<span class="${valorComCusto >= custo ? 'alta' : 'baixa'}">${pct((valorComCusto / custo - 1) * 100)} sobre o preço médio</span>` : ''}</div>
@@ -931,7 +1079,7 @@ function telaCarteira() {
       <button class="btn sec peq" onclick="editarListas()">Listas e metas</button>
     </div>
     <input type="file" id="arqB3" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" style="display:none" onchange="lerArquivoB3(this)"></div>`;
-  if (Math.abs(somaMetas - 100) > 0.01) h += `<div class="aviso">As metas das listas somam ${num(somaMetas, 1)}% (o certo é 100%). Ajuste em “Listas e metas”.</div>`;
+
 
   // distribuição × meta
   h += `<div class="card"><h2>Distribuição × meta</h2>`;
@@ -1032,8 +1180,8 @@ function linhaItem(it, totCat) {
   const q = it.sym ? cotacoes[it.sym] : null;
   const inv = it.sym && it.pm > 0 ? it.pm * (+it.qtd || 0) : null;
   const sinal = it.sym && it.alvo > 0 && p != null
-    ? (p <= it.alvo ? `<span class="tag" style="background:#0F3D2A;color:var(--alta);border-color:#19C37D">COMPRA ≤ ${num(it.alvo)}</span>`
-      : `<span class="tag" style="background:#3D1418;color:var(--baixa);border-color:#F23645">ACIMA DO ALVO ${num(it.alvo)}</span>`) : '';
+    ? (p <= it.alvo ? `<span class="tag" style="background:var(--compraBg);color:var(--alta);border-color:var(--alta)">COMPRA ≤ ${num(it.alvo)}</span>`
+      : `<span class="tag" style="background:var(--vendaBg);color:var(--baixa);border-color:var(--baixa)">ACIMA DO ALVO ${num(it.alvo)}</span>`) : '';
   return `<div class="al" style="cursor:pointer" onclick="formItem('${it.id}')">
     <div class="t"><b>${esc(it.sym ? rot(it.sym) : it.nome)}</b>${sinal}
       ${it.sym ? `<span class="sub"> · ${num(+it.qtd || 0, (+it.qtd || 0) % 1 ? 2 : 0)} × ${p == null ? '—' : num(p)}</span>` : '<span class="sub"> · valor manual</span>'}
@@ -1068,8 +1216,8 @@ function desenharHist() {
   g.font = '11px system-ui, sans-serif'; g.textBaseline = 'middle';
   const passo = niceStep((hi - lo) / 4);
   for (let y = Math.ceil(lo / passo) * passo; y <= hi; y += passo) {
-    g.strokeStyle = '#222933'; g.beginPath(); g.moveTo(padL, Y(y)); g.lineTo(W - padR, Y(y)); g.stroke();
-    g.fillStyle = '#6E7887'; g.fillText(dinheiro(y).replace(/,\d\d$/, ''), W - padR + 6, Y(y));
+    g.strokeStyle = C('grade'); g.beginPath(); g.moveTo(padL, Y(y)); g.lineTo(W - padR, Y(y)); g.stroke();
+    g.fillStyle = C('eixo'); g.fillText(dinheiro(y).replace(/,\d\d$/, ''), W - padR + 6, Y(y));
   }
   g.textAlign = 'center'; g.textBaseline = 'alphabetic';
   const passoX = Math.max(1, Math.ceil(n / 6));
@@ -1141,21 +1289,44 @@ function removerItem(id) {
   cart.itens = cart.itens.filter(i => i.id !== id); registrarMes(); salvarCart(); fecharFolha(); telaCarteira();
 }
 
+// uma lista fica com "o restante" para a soma das metas fechar sempre 100%
+function listaResto() {
+  let c = catDe(cart.resto);
+  if (!c) c = cart.cats.find(x => x.nome === 'CAIXA') || cart.cats[0];
+  if (c) cart.resto = c.id;
+  return c;
+}
+const arred = v => Math.round(v * 100) / 100;
+function ajustarMetas(editadaId) {
+  const r = listaResto(); if (!r) return;
+  const outras = cart.cats.filter(c => c !== r);
+  outras.forEach(c => c.meta = Math.max(0, arred(+c.meta || 0)));
+  let soma = outras.reduce((s, c) => s + c.meta, 0);
+  if (soma > 100) {   // passou de 100: a lista editada fica só com o que sobra
+    const ed = outras.find(c => c.id === editadaId) || outras[outras.length - 1];
+    ed.meta = arred(Math.max(0, ed.meta - (soma - 100)));
+    soma = outras.reduce((s, c) => s + c.meta, 0);
+    toast(`${ed.nome} ficou em ${num(ed.meta, 2)}% para a soma não passar de 100%.`);
+  }
+  r.meta = arred(100 - soma);
+}
 function editarListas() {
+  ajustarMetas();
+  const r = listaResto();
   const linhas = cart.cats.map((c, i) => `<div class="linha" style="margin-bottom:8px">
     <input type="color" value="${c.cor}" onchange="cart.cats[${i}].cor=this.value">
     <input value="${esc(c.nome)}" onchange="cart.cats[${i}].nome=this.value.trim().toUpperCase()||'LISTA'">
-    <input style="width:80px;flex:none" type="number" inputmode="decimal" value="${c.meta}" onchange="cart.cats[${i}].meta=parseFloat(this.value.replace(',','.'))||0;somaMetasLista()">
+    ${c === r
+      ? `<input style="width:80px;flex:none;opacity:.7" value="${num(c.meta, 2)}" disabled title="restante">`
+      : `<input style="width:80px;flex:none" type="number" inputmode="decimal" min="0" max="100" step="0.5" value="${c.meta}" onchange="cart.cats[${i}].meta=parseFloat(this.value.replace(',','.'))||0;ajustarMetas('${c.id}');editarListas()">`}
     <span class="sub">%</span><button class="x" onclick="apagarLista(${i})">×</button></div>`).join('');
-  abrirFolha(`<h2>Listas e metas</h2><div class="sub" style="margin-bottom:10px">Nome, cor e % da carteira que cada lista deve ter.</div>
-    ${linhas}<div id="somaMetas" class="sub"></div>
+  abrirFolha(`<h2>Listas e metas</h2><div class="sub" style="margin-bottom:10px">Nome, cor e % da carteira que cada lista deve ter. A soma fecha sempre em 100%.</div>
+    ${linhas}
+    <div class="linha" style="margin-top:6px"><span class="sub" style="flex:1">Fica com o restante:</span>
+      <select style="width:auto" onchange="cart.resto=this.value;ajustarMetas();editarListas()">${cart.cats.map(c => `<option value="${c.id}" ${c === r ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select></div>
+    <div class="sub" style="margin-top:6px">Soma das metas: <b class="alta">100%</b></div>
     <div class="linha" style="margin-top:12px"><button class="btn sec" onclick="novaLista()">+ Nova lista</button><span style="flex:1"></span>
-      <button class="btn" onclick="salvarCart();fecharFolha();render()">Pronto</button></div>`);
-  somaMetasLista();
-}
-function somaMetasLista() {
-  const s = cart.cats.reduce((a, c) => a + (+c.meta || 0), 0), el = $('somaMetas');
-  if (el) el.innerHTML = `Soma das metas: <b class="${Math.abs(s - 100) < 0.01 ? 'alta' : 'baixa'}">${num(s, 1)}%</b>`;
+      <button class="btn" onclick="ajustarMetas();salvarCart();fecharFolha();render()">Pronto</button></div>`);
 }
 function novaLista() {
   cart.cats.push({ id: novoId(), nome: 'NOVA LISTA', meta: 0, cor: CORES[cart.cats.length % CORES.length] }); editarListas();
@@ -1163,7 +1334,7 @@ function novaLista() {
 function apagarLista(i) {
   const c = cart.cats[i], n = cart.itens.filter(x => x.cat === c.id).length;
   if (n && !confirm(`A lista ${c.nome} tem ${n} ativo(s). Apagar a lista e esses ativos?`)) return;
-  cart.itens = cart.itens.filter(x => x.cat !== c.id); cart.cats.splice(i, 1); editarListas();
+  cart.itens = cart.itens.filter(x => x.cat !== c.id); cart.cats.splice(i, 1); ajustarMetas(); editarListas();
 }
 
 /* ===================== Importação da B3 ===================== */
@@ -1370,7 +1541,328 @@ function aplicarImportacao(planilhas) {
   return r || 'Nada mudou.';
 }
 
+/* ===================== Indicadores (Fundamentus + Bolsai) ===================== */
+const FUNDAMENTUS = 'https://www.fundamentus.com.br/';
+const BOLSAI = 'https://api.usebolsai.com/api/v1/';
+const fundMem = {}, provMem = {};
+let fundCache = ler('fundCache', {});      // { sym: { t, d } } — só neste aparelho
+let fundHist = ler('fundHist', {});        // { sym: { 'AAAA-MM': {pl, pvp, dy} } } — sincronizado
+const chaveBolsai = () => (B.load('bolsaiChave') || '').trim();
+const ehB3 = s => /\.SA$/.test(s);
+async function buscarTexto(url, cab) {
+  if (B.fetchCom) return chamar('fetchCom', url, cab ? JSON.stringify(cab) : '');
+  return chamar('fetch', url);
+}
+async function bolsai(caminho) {
+  const k = chaveBolsai(); if (!k) throw new Error('sem chave da Bolsai');
+  return JSON.parse(await buscarTexto(BOLSAI + caminho, { 'X-API-Key': k }));
+}
+const numF = x => { const v = numBR(String(x == null ? '' : x).replace('%', '')); return isNaN(v) ? null : v; };
+
+// lê as tabelas "rótulo → valor" do Fundamentus
+function lerTabelaFundamentus(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html'), out = {};
+  const tds = [...doc.querySelectorAll('td')];
+  tds.forEach((td, i) => {
+    if (!td.classList.contains('label') || !tds[i + 1]) return;
+    const r = ((td.querySelector('.txt') || td).textContent || '').replace(/^\?/, '').trim();
+    if (r && out[r] == null) out[r] = ((tds[i + 1].querySelector('.txt') || tds[i + 1]).textContent || '').trim();
+  });
+  return out;
+}
+function mapaAcao(t) {
+  return {
+    tipo: 'acao', fonte: 'Fundamentus', empresa: t['Empresa'] || '', setor: t['Setor'] || '', subsetor: t['Subsetor'] || '',
+    dy: numF(t['Div. Yield']), pl: numF(t['P/L']), pvp: numF(t['P/VP']), roe: numF(t['ROE']), roic: numF(t['ROIC']),
+    lpa: numF(t['LPA']), vpa: numF(t['VPA']), margLiq: numF(t['Marg. Líquida']), divPL: numF(t['Dív Líq/ Patrim']) ?? numF(t['Dív Líq / Patrim']),
+    evEbitda: numF(t['EV / EBITDA']), valorMercado: numF(t['Valor de mercado']), liqCorr: numF(t['Liquidez Corr']),
+    cresRec: numF(t['Cres. Rec (5a)']), min52: numF(t['Min 52 sem']), max52: numF(t['Max 52 sem'])
+  };
+}
+function mapaFII(t) {
+  return {
+    tipo: 'fii', fonte: 'Fundamentus', empresa: t['Nome'] || '', setor: t['Segmento'] || '', mandato: t['Mandato'] || '',
+    dy: numF(t['Div. Yield']), pvp: numF(t['P/VP']), vpa: numF(t['VP/Cota']), ffoYield: numF(t['FFO Yield']),
+    dividendoCota: numF(t['Dividendo/cota']), valorMercado: numF(t['Valor de mercado']), vacancia: numF(t['Vacância Média']),
+    imoveis: numF(t['Qtd imóveis']), min52: numF(t['Min 52 sem']), max52: numF(t['Max 52 sem'])
+  };
+}
+async function buscarFund(sym, forcar) {
+  if (!ehB3(sym)) return null;
+  if (fundMem[sym] && !forcar) return fundMem[sym];
+  const c = fundCache[sym];
+  if (c && !forcar && Date.now() - c.t < 12 * 3600e3) return (fundMem[sym] = c.d);
+  const T = rot(sym);
+  let d = null, erro = null;
+  // 1) ações e units no Fundamentus
+  try {
+    const t = lerTabelaFundamentus(await buscarTexto(FUNDAMENTUS + 'detalhes.php?papel=' + T));
+    if (t['P/L'] != null || t['P/VP'] != null) d = t['Div. Yield'] != null && t['P/L'] == null ? mapaFII(t) : mapaAcao(t);
+  } catch (e) { erro = e; }
+  // 2) FIIs: Bolsai (com chave) ou página de FII do Fundamentus
+  if (!d && /11$/.test(T)) {
+    if (chaveBolsai()) {
+      try {
+        const j = await bolsai('fiis/' + T);
+        d = { tipo: 'fii', fonte: 'Bolsai', empresa: j.name || '', setor: j.segment || '', mandato: j.fund_type || '',
+          dy: j.dividend_yield_ttm, pvp: j.pvp, vpa: j.book_value_per_share, valorMercado: j.net_asset_value,
+          vacancia: j.vacancy_pct, imoveis: j.property_count, cotistas: j.total_shareholders };
+      } catch (e) { erro = e; }
+    }
+    if (!d) {
+      try {
+        const t = lerTabelaFundamentus(await buscarTexto(FUNDAMENTUS + 'fii_detalhes.php?papel=' + T));
+        if (t['P/VP'] != null || t['Div. Yield'] != null) d = mapaFII(t);
+      } catch (e) { erro = e; }
+    }
+  }
+  // 3) ações pela Bolsai, se o Fundamentus falhar
+  if (!d && chaveBolsai()) {
+    try {
+      const j = await bolsai('fundamentals/' + T);
+      d = { tipo: 'acao', fonte: 'Bolsai', empresa: j.corporate_name || '', setor: '', dy: null, pl: j.pl, pvp: j.pvp,
+        roe: j.roe, roic: j.roic, lpa: j.lpa, vpa: j.vpa, margLiq: j.net_margin, divPL: j.debt_equity,
+        evEbitda: j.ev_ebitda, valorMercado: j.market_cap };
+    } catch (e) { erro = erro || e; }
+  }
+  if (!d) {
+    if (c) return (fundMem[sym] = c.d);   // usa o último que deu certo
+    throw erro || new Error('sem indicadores para ' + T);
+  }
+  // DY de FII/ação sem DY: calcula pelos proventos dos últimos 12 meses
+  if (d.dy == null) {
+    try { const r = await historicoDY(sym); if (r && r.atual != null) d.dy = r.atual; } catch (e) { }
+  }
+  d.t = Date.now();
+  fundMem[sym] = d;
+  fundCache[sym] = { t: Date.now(), d }; gravar('fundCache', fundCache);
+  guardarMesFund(sym, d);
+  return d;
+}
+// registro mensal de P/L, P/VP e DY (vira o histórico quando não há fonte com histórico)
+function guardarMesFund(sym, d) {
+  const m = mesAtual(), h = fundHist[sym] = fundHist[sym] || {};
+  const novo = { pl: d.pl ?? null, pvp: d.pvp ?? null, dy: d.dy ?? null };
+  if (JSON.stringify(h[m]) === JSON.stringify(novo)) return;
+  h[m] = novo; gravar('fundHist', fundHist);
+}
+
+/* --- proventos e histórico do DY --- */
+async function buscarSplits(sym) {
+  try {
+    const j = JSON.parse(await chamar('fetch', URL_Y + encodeURIComponent(sym) + '?range=max&interval=1mo&events=split'));
+    const sp = (((j.chart.result || [])[0] || {}).events || {}).splits || {};
+    return Object.values(sp).map(x => ({ t: x.date, f: (+x.numerator || 1) / (+x.denominator || 1) })).filter(x => x.f > 0 && x.f !== 1);
+  } catch (e) { return []; }
+}
+const dataBRparaISO = d => { const m = String(d).match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
+async function buscarProventos(sym) {
+  if (provMem[sym] && Date.now() - provMem[sym].t < 6 * 3600e3) return provMem[sym].l;
+  const T = rot(sym);
+  let lista = [];
+  for (const pag of [`proventos.php?papel=${T}&tipo=2`, `fii_proventos.php?papel=${T}&tipo=2`]) {
+    try {
+      const doc = new DOMParser().parseFromString(await buscarTexto(FUNDAMENTUS + pag), 'text/html');
+      const tab = doc.querySelector('#resultado') || [...doc.querySelectorAll('table')].find(t => /valor/i.test(t.textContent));
+      if (!tab) continue;
+      const cab = [...tab.querySelectorAll('th')].map(th => semAcento(th.textContent));
+      const iD = cab.findIndex(h => h.includes('data') && !h.includes('pagamento')), iV = cab.findIndex(h => h.includes('valor')),
+        iT = cab.findIndex(h => h.includes('tipo')), iQ = cab.findIndex(h => h.includes('quantas'));
+      tab.querySelectorAll('tbody tr').forEach(tr => {
+        const td = [...tr.querySelectorAll('td')].map(x => x.textContent.trim());
+        const d = dataBRparaISO(td[iD]), v = numF(td[iV]), q = iQ >= 0 ? numF(td[iQ]) || 1 : 1;
+        if (d && v > 0) lista.push({ d, v: v / q, tipo: iT >= 0 ? td[iT] : '' });
+      });
+      if (lista.length) break;
+    } catch (e) { }
+  }
+  // Bolsai (plano Pro) como alternativa
+  if (!lista.length && chaveBolsai()) {
+    try {
+      const j = await bolsai(`dividends/${T}?years=20`);
+      lista = (j.payments || []).filter(p => p.ex_date && p.value_per_share > 0).map(p => ({ d: p.ex_date, v: +p.value_per_share, tipo: p.type || '', ajustado: !!p.adjusted }));
+    } catch (e) { }
+  }
+  // o Fundamentus não ajusta desdobramentos/bonificações: ajusta pelo Yahoo
+  const splits = await buscarSplits(sym);
+  lista.forEach(p => {
+    if (p.ajustado) return;
+    const tp = Date.parse(p.d) / 1000;
+    splits.forEach(s => { if (tp < s.t) p.v = p.v / s.f; });
+  });
+  lista.sort((a, b) => a.d < b.d ? -1 : 1);
+  provMem[sym] = { t: Date.now(), l: lista };
+  return lista;
+}
+// DY por ano = proventos (pela data com) ÷ preço de fechamento do ano; "atual" = últimos 12 meses ÷ preço atual
+async function historicoDY(sym) {
+  const [prov, h] = await Promise.all([buscarProventos(sym), buscarHistorico(sym, 'm')]);
+  if (!prov.length) return { anos: [], atual: null, prov, porAno: {} };
+  const fech = {};
+  (h.m || []).forEach(p => { const y = new Date(p.t * 1000).getUTCFullYear(); fech[y] = p.c; });
+  const porAno = {};
+  prov.forEach(p => { const y = +p.d.slice(0, 4); porAno[y] = (porAno[y] || 0) + p.v; });
+  const anoAtual = new Date().getFullYear();
+  const anos = Object.keys(porAno).map(Number).filter(y => y < anoAtual && fech[y] > 0).sort()
+    .slice(-10).map(y => ({ ano: y, dy: porAno[y] / fech[y] * 100, valor: porAno[y] }));
+  const umAno = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
+  const q = cotacoes[sym] || {}, preco = q.preco || h.preco;
+  const ult12 = prov.filter(p => p.d > umAno).reduce((s, p) => s + p.v, 0);
+  return { anos, atual: preco ? ult12 / preco * 100 : null, ult12, prov, porAno };
+}
+// P/L e P/VP: histórico trimestral da Bolsai (Pro) ou o registro mensal do app
+async function historicoIndicador(sym, k) {
+  if (chaveBolsai() && !/11$/.test(rot(sym))) {
+    try {
+      const j = await bolsai(`fundamentals/${rot(sym)}/history?limit=80`);
+      const l = (j.history || []).filter(x => x[k] != null).map(x => ({ rot: x.reference_date.slice(5, 7) + '/' + x.reference_date.slice(2, 4), v: +x[k], d: x.reference_date }))
+        .sort((a, b) => a.d < b.d ? -1 : 1);
+      if (l.length) return { fonte: 'Bolsai (trimestral)', pontos: l };
+    } catch (e) { }
+  }
+  const h = fundHist[sym] || {};
+  return { fonte: 'registro mensal do app', pontos: Object.keys(h).sort().filter(m => h[m][k] != null).map(m => ({ rot: nomeMes(m), v: h[m][k], d: m })) };
+}
+
+/* --- cartão de indicadores na tela da ação --- */
+function fmtInd(k, v) {
+  if (v == null || isNaN(v)) return '—';
+  if (['dy', 'roe', 'roic', 'margLiq', 'vacancia', 'ffoYield', 'cresRec'].includes(k)) return num(v, k === 'dy' ? 2 : 1) + '%';
+  if (k === 'valorMercado') return v >= 1e9 ? 'R$ ' + num(v / 1e9, 1) + ' bi' : 'R$ ' + num(v / 1e6, 1) + ' mi';
+  if (['lpa', 'vpa', 'dividendoCota'].includes(k)) return 'R$ ' + num(v);
+  if (k === 'imoveis' || k === 'cotistas') return num(v, 0);
+  return num(v);
+}
+const ROT_IND = { dy: 'D.Y', pl: 'P/L', pvp: 'P/VP', roe: 'ROE', roic: 'ROIC', lpa: 'LPA', vpa: 'VPA', margLiq: 'Marg. líquida',
+  divPL: 'Dív. líq/PL', evEbitda: 'EV/EBITDA', valorMercado: 'Valor de mercado', liqCorr: 'Liquidez corr.', cresRec: 'Cresc. receita 5a',
+  ffoYield: 'FFO Yield', dividendoCota: 'Dividendo/cota', vacancia: 'Vacância', imoveis: 'Imóveis', cotistas: 'Cotistas' };
+async function cardIndicadores(sym) {
+  const el = $('fundCard'); if (!el) return;
+  if (!ehB3(sym)) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="card"><h2>Indicadores</h2><div class="sub">Carregando…</div></div>`;
+  let d;
+  try { d = await buscarFund(sym); }
+  catch (e) {
+    if (atual !== sym || !$('fundCard')) return;
+    el.innerHTML = `<div class="card"><h2>Indicadores</h2><div class="sub">Não consegui carregar (${esc(e.message).slice(0, 80)}).${/11$/.test(rot(sym)) && !chaveBolsai() ? ' Para FIIs, cole a chave grátis da Bolsai em Indicadores › Fontes de dados.' : ''}</div></div>`;
+    return;
+  }
+  if (atual !== sym || !$('fundCard')) return;
+  const ks = d.tipo === 'fii' ? ['dy', 'pvp', 'vpa', 'dividendoCota', 'ffoYield', 'vacancia', 'imoveis', 'cotistas', 'valorMercado']
+    : ['dy', 'pl', 'pvp', 'roe', 'lpa', 'vpa', 'margLiq', 'divPL', 'evEbitda', 'roic', 'liqCorr', 'valorMercado'];
+  const comHist = ['dy', 'pl', 'pvp'];
+  el.innerHTML = `<div class="card"><div class="linha"><h2 style="flex:1;margin:0">Indicadores</h2><span class="sub" style="font-size:11px">${esc(d.fonte)} · ${new Date(d.t).toLocaleDateString('pt-BR')}</span></div>
+    ${d.setor ? `<div class="sub" style="margin:4px 0 8px">${esc(d.setor)}${d.subsetor ? ' · ' + esc(d.subsetor) : ''}${d.mandato ? ' · ' + esc(d.mandato) : ''}</div>` : ''}
+    <div class="grade-ind">${ks.filter(k => d[k] != null).map(k => `<div class="ind ${comHist.includes(k) ? 'clic' : ''}" ${comHist.includes(k) ? `onclick="abrirHistorico('${esc(sym)}','${k}')"` : ''}>
+      <span class="sub">${ROT_IND[k]}${comHist.includes(k) ? ' <span style="color:var(--ouro)">📈</span>' : ''}</span><b>${fmtInd(k, d[k])}</b></div>`).join('')}</div>
+    <div class="sub" style="font-size:11px;margin-top:8px">Toque em D.Y, P/L ou P/VP para ver o histórico.</div></div>
+    <div id="provCard"></div>`;
+  cardProventos(sym);
+}
+async function cardProventos(sym) {
+  let r;
+  try { r = await historicoDY(sym); } catch (e) { return; }
+  const el = $('provCard'); if (!el || atual !== sym || !r.prov.length) return;
+  const anos = Object.keys(r.porAno).map(Number).sort().slice(-8);
+  const max = Math.max(...anos.map(y => r.porAno[y]));
+  el.innerHTML = `<div class="card"><div class="linha"><h2 style="flex:1;margin:0">Proventos por ano</h2><span class="sub">R$ por ${/11$/.test(rot(sym)) ? 'cota' : 'ação'}</span></div>
+    <div style="display:flex;align-items:flex-end;gap:6px;height:120px;margin:12px 0 4px">${anos.map(y => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%">
+      <span style="font-size:10px" class="sub">${num(r.porAno[y])}</span>
+      <div style="width:100%;max-width:34px;height:${Math.max(2, r.porAno[y] / max * 90)}px;background:${y === new Date().getFullYear() ? 'var(--cruz)' : 'var(--ouro)'};border-radius:4px 4px 0 0"></div></div>`).join('')}</div>
+    <div style="display:flex;gap:6px">${anos.map(y => `<span class="sub" style="flex:1;text-align:center;font-size:11px">${y}</span>`).join('')}</div>
+    <div class="sub" style="margin-top:10px">Últimos 12 meses: <b style="color:var(--txt)">R$ ${num(r.ult12 || 0)}</b> por ${/11$/.test(rot(sym)) ? 'cota' : 'ação'}</div>
+    <div style="margin-top:8px;font-size:13px;font-variant-numeric:tabular-nums">${r.prov.slice(-5).reverse().map(p => `<div class="linha" style="padding:3px 0"><span style="flex:1">${dataISOparaBR(p.d)} · <span class="sub">${esc(p.tipo)}</span></span><b>R$ ${num(p.v, 4)}</b></div>`).join('')}</div>
+    <div class="sub" style="font-size:11px;margin-top:6px">Datas “com”. Valores ajustados por desdobramentos e bonificações.</div></div>`;
+}
+
+/* --- janela de histórico (linha ou barras), no estilo do Status Invest --- */
+let histModo = 'linha';
+async function abrirHistorico(sym, k) {
+  abrirFolha(`<h2>${ROT_IND[k]} — histórico</h2><div class="sub">Carregando…</div>`);
+  let pontos = [], fonte = '', atualV = null;
+  try {
+    if (k === 'dy') {
+      const r = await historicoDY(sym);
+      pontos = r.anos.map(a => ({ rot: String(a.ano), v: a.dy }));
+      const d = fundMem[sym] || (fundCache[sym] || {}).d;
+      atualV = d && d.dy != null ? d.dy : r.atual; fonte = 'proventos do Fundamentus ÷ preço de fechamento do ano';
+    } else {
+      const r = await historicoIndicador(sym, k);
+      pontos = r.pontos; fonte = r.fonte;
+      const d = fundMem[sym] || (fundCache[sym] || {}).d; atualV = d ? d[k] : null;
+    }
+  } catch (e) { abrirFolha(`<h2>${ROT_IND[k]} — histórico</h2><div class="sub">Não consegui carregar: ${esc(e.message)}</div><button class="btn sec" style="margin-top:12px;width:100%" onclick="fecharFolha()">Fechar</button>`); return; }
+  const todos = atualV != null ? pontos.concat([{ rot: 'ATUAL', v: atualV, atual: true }]) : pontos;
+  const vals = pontos.map(p => p.v), media = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  const mn = todos.length ? todos.reduce((a, b) => b.v < a.v ? b : a) : null, mx = todos.length ? todos.reduce((a, b) => b.v > a.v ? b : a) : null;
+  const f = v => k === 'dy' ? num(v) + '%' : num(v);
+  const difMedia = media && atualV != null ? (atualV / media - 1) * 100 : null;
+  const pouco = k !== 'dy' && pontos.length < 2;
+  abrirFolha(`<h2>${ROT_IND[k]} — histórico</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin:6px 0 12px">
+      <div><div class="sub">MÉDIA</div><b style="font-size:20px">${media != null ? f(media) : '—'}</b></div>
+      <div><div class="sub">ATUAL</div><b style="font-size:20px">${atualV != null ? f(atualV) : '—'}</b>
+        ${difMedia != null ? `<div class="sub" style="font-size:12px">(${num(Math.abs(difMedia))}% ${difMedia >= 0 ? 'acima' : 'abaixo'} da média)</div>` : ''}</div>
+      <div><div class="sub">MENOR VALOR</div><b style="font-size:18px">${mn ? f(mn.v) : '—'}</b> <span class="sub">${mn ? '(' + mn.rot + ')' : ''}</span></div>
+      <div><div class="sub">MAIOR VALOR</div><b style="font-size:18px">${mx ? f(mx.v) : '—'}</b> <span class="sub">${mx ? '(' + mx.rot + ')' : ''}</span></div>
+    </div>
+    <div class="modo" style="justify-content:center;margin-bottom:8px"><button id="hL" class="${histModo === 'linha' ? 'on' : ''}" onclick="histModo='linha';desenharHistInd()">Linha</button><button id="hB" class="${histModo === 'barras' ? 'on' : ''}" onclick="histModo='barras';desenharHistInd()">Barras</button></div>
+    <div class="grafico" style="height:230px"><canvas id="cvInd"></canvas></div>
+    <div class="sub" style="font-size:11px;margin-top:6px">${pouco ? 'O histórico deste indicador está sendo formado: o app guarda um valor por mês a partir de agora. Com a chave Pro da Bolsai aparece o histórico trimestral completo.<br>' : ''}Fonte: ${esc(fonte)}.</div>
+    <button class="btn sec" style="margin-top:12px;width:100%" onclick="fecharFolha()">Fechar</button>`);
+  histInd = { pontos: todos, media, f };
+  desenharHistInd();
+}
+let histInd = null;
+function desenharHistInd() {
+  const cv = $('cvInd'); if (!cv || !histInd) return;
+  $('hL') && $('hL').classList.toggle('on', histModo === 'linha'); $('hB') && $('hB').classList.toggle('on', histModo === 'barras');
+  const { pontos, media, f } = histInd;
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  if (!pontos.length) { g.fillStyle = C('sub'); g.font = '13px system-ui'; g.fillText('Sem dados ainda.', 10, 30); return; }
+  const n = pontos.length, padL = 8, padR = 8, padT = 22, padB = 24;
+  let lo = Math.min(0, ...pontos.map(p => p.v)), hi = Math.max(...pontos.map(p => p.v), media || 0); hi += (hi - lo) * 0.15 || 1;
+  const X = i => n === 1 ? W / 2 : padL + 14 + (W - padL - padR - 28) * i / (n - 1);
+  const Y = v => padT + (H - padT - padB) * (1 - (v - lo) / (hi - lo));
+  g.strokeStyle = C('grade'); g.lineWidth = 1;
+  for (let k = 0; k <= 4; k++) { const y = padT + (H - padT - padB) * k / 4; g.beginPath(); g.moveTo(padL, y); g.lineTo(W - padR, y); g.stroke(); }
+  if (media != null) {   // linha da média
+    g.setLineDash([6, 4]); g.strokeStyle = C('cruz'); g.beginPath(); g.moveTo(padL, Y(media)); g.lineTo(W - padR, Y(media)); g.stroke(); g.setLineDash([]);
+  }
+  const cor = '#E8803A';
+  g.font = '10px system-ui, sans-serif'; g.textAlign = 'center';
+  if (histModo === 'barras') {
+    const larg = Math.min(34, (W - padL - padR) / n * 0.6);
+    pontos.forEach((p, i) => { g.fillStyle = p.atual ? C('cruz') : cor; g.fillRect(X(i) - larg / 2, Y(Math.max(p.v, 0)), larg, Math.abs(Y(p.v) - Y(0))); });
+  } else {
+    g.strokeStyle = cor; g.lineWidth = 2; g.beginPath(); pontos.forEach((p, i) => i ? g.lineTo(X(i), Y(p.v)) : g.moveTo(X(i), Y(p.v))); g.stroke();
+    pontos.forEach((p, i) => { g.fillStyle = C('card'); g.beginPath(); g.arc(X(i), Y(p.v), 3.5, 0, 7); g.fill(); g.strokeStyle = cor; g.lineWidth = 1.5; g.stroke(); });
+  }
+  const passo = Math.max(1, Math.ceil(n / 7));
+  pontos.forEach((p, i) => {
+    if (n <= 12 || i % passo === 0 || p.atual) { g.fillStyle = C('txt'); g.fillText(f(p.v), X(i), Y(Math.max(p.v, 0)) - 7); }
+    if (i % passo === 0 || p.atual) { g.fillStyle = C('eixo'); g.fillText(p.rot, X(i), H - 6); }
+  });
+  g.textAlign = 'left';
+}
+
 /* ===================== Simulação (só para testar fora do celular) ===================== */
+function simFund(url) {
+  const T = (url.match(/papel=([A-Z0-9]+)/) || [])[1] || '';
+  if (/fii_detalhes/.test(url)) return '<html>erro</html>';
+  if (/proventos/.test(url)) {
+    let r = '';
+    for (let y = 2016; y <= 2026; y++) for (const m of ['03', '06', '09', '12']) if (y < 2026 || m < '10') r += `<tr><td>15/${m}/${y}</td><td>${(0.3 + (y - 2016) * 0.04).toFixed(4).replace('.', ',')}</td><td>DIVIDENDO</td><td>30/${m}/${y}</td><td>1</td></tr>`;
+    return `<table id="resultado"><thead><tr><th>Data</th><th>Valor</th><th>Tipo</th><th>Data de Pagamento</th><th>Por quantas ações</th></tr></thead><tbody>${r}</tbody></table>`;
+  }
+  if (/11$/.test(T) && T !== 'TAEE11') return '<html>Nenhum papel encontrado</html>';
+  const cel = (l, v) => `<td class="label"><span class="help tips">?</span><span class="txt">${l}</span></td><td class="data"><span class="txt">${v}</span></td>`;
+  return `<table><tr>${cel('Empresa', 'EMPRESA ' + T)}${cel('Setor', 'Energia Elétrica')}</tr><tr>${cel('Subsetor', 'Energia')}${cel('Valor de mercado', '24.123.000.000')}</tr>
+    <tr>${cel('P/L', '5,09')}${cel('LPA', '10,35')}</tr><tr>${cel('P/VP', '1,41')}${cel('VPA', '37,32')}</tr><tr>${cel('Div. Yield', '6,9%')}${cel('ROE', '27,7%')}</tr>
+    <tr>${cel('EV / EBITDA', '3,08')}${cel('Marg. Líquida', '24,4%')}</tr><tr>${cel('Dív Líq / Patrim', '0,65')}${cel('ROIC', '19,7%')}</tr><tr>${cel('Liquidez Corr', '0,85')}</tr></table>`;
+}
 function simulacao() {
   const mem = {};
   const nomes = { 'PETR4.SA': 'PETROBRAS PN', 'VALE3.SA': 'VALE ON', 'ITUB4.SA': 'ITAUUNIBANCO PN', AAPL: 'Apple Inc.', NVDA: 'NVIDIA Corporation' };
@@ -1384,13 +1876,14 @@ function simulacao() {
   }
   return {
     fetch(url, id) {
+      if (/fundamentus|usebolsai/.test(url)) return setTimeout(() => window.__cb(id, true, simFund(url)), 150);
       setTimeout(() => {
         const sym = decodeURIComponent(url.split('/chart/')[1].split('?')[0]);
         if (sym.startsWith('XXXX')) return window.__cb(id, false, 'HTTP 404');
         const sem = url.includes('1wk'), n = url.includes('5d') ? 5 : sem ? 700 : 2500;
         const full = serie(sym, 3500, 1), preco = full.c[full.c.length - 1];
         let ts = full.ts.slice(-n), c = full.c.slice(-n);
-        const passo = url.includes('1mo') ? 21 : sem ? 5 : 0;
+        const passo = url.includes('1mo') ? 30 : sem ? 7 : 0;
         if (passo) { ts = []; c = []; for (let i = full.c.length - 1; i >= 0; i -= passo) { ts.unshift(full.ts[i]); c.unshift(full.c[i]); } }
         window.__cb(id, true, JSON.stringify({ chart: { result: [{ meta: { regularMarketPrice: preco, currency: sym.endsWith('.SA') ? 'BRL' : 'USD', shortName: nomes[sym] || sym },
           timestamp: ts, indicators: { quote: [(() => { const cc = url.includes('5d') ? full.c.slice(-5) : c;

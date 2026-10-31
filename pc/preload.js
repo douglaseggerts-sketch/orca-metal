@@ -4,6 +4,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('Android', {
   plataforma: () => 'pc',
   fetch: (url) => ipcRenderer.invoke('fetch', url),
+  fetchCom: (url, cab) => ipcRenderer.invoke('fetch', url, cab ? JSON.parse(cab) : null),
+  temaSistemaEscuro: () => ipcRenderer.sendSync('temaSistemaEscuro'),
+  barras: () => { },
   verificarAgora: () => ipcRenderer.invoke('verificarAgora'),
   sincronizar: () => ipcRenderer.invoke('sincronizar'),
   load: (k) => ipcRenderer.sendSync('load', k),

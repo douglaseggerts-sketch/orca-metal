@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, net, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, net, nativeImage, shell, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const motor = require('./motor');
@@ -26,7 +26,7 @@ function gravarArquivo() {
   } catch (e) { console.error(e); }
 }
 // chaves que vão para a planilha; cada uma guarda a hora da última alteração em _t
-const SINCRONIZADAS = ['lista', 'medias', 'ifr', 'carteira', 'alertas', 'alertasExcluidos'];
+const SINCRONIZADAS = ['lista', 'medias', 'ifr', 'carteira', 'alertas', 'alertasExcluidos', 'fundHist'];
 const store = {
   get: (k) => (carregar()[k] != null ? String(carregar()[k]) : ''),
   tem: (k) => carregar()[k] != null,
@@ -74,12 +74,17 @@ async function sincronizar() {
 async function tentarSync() { if (syncConfigurado()) { try { await sincronizar(); } catch (e) { } } }
 
 /* ---------- internet (só Yahoo Finance) ---------- */
-async function baixarTexto(url) {
-  if (!/^https:\/\/query[12]\.finance\.yahoo\.com\//.test(url)) throw new Error('endereço não permitido');
+const HOSTS = /^https:\/\/(query[12]\.finance\.yahoo\.com|www\.fundamentus\.com\.br|api\.usebolsai\.com)\//;
+async function baixarTexto(url, cabecalhos) {
+  if (!HOSTS.test(url)) throw new Error('endereço não permitido');
   const r = await net.fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36' }
+    headers: Object.assign({ 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36' }, cabecalhos || {})
   });
-  const t = await r.text();
+  // o Fundamentus responde em ISO-8859-1: decodifica pelo charset informado
+  const m = /charset=([^;]+)/i.exec(r.headers.get('content-type') || '');
+  let t;
+  try { t = new TextDecoder((m ? m[1] : 'utf-8').trim().replace(/"/g, '')).decode(await r.arrayBuffer()); }
+  catch (e) { t = await r.text(); }
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return t;
 }
@@ -106,7 +111,8 @@ async function verificar() {
 }
 
 /* ---------- ponte com a tela ---------- */
-ipcMain.handle('fetch', (e, url) => baixarTexto(url));
+ipcMain.handle('fetch', (e, url, cab) => baixarTexto(url, cab));
+ipcMain.on('temaSistemaEscuro', (e) => { e.returnValue = nativeTheme.shouldUseDarkColors; });
 ipcMain.handle('verificarAgora', () => verificar());
 ipcMain.handle('sincronizar', () => sincronizar());
 ipcMain.on('load', (e, k) => { e.returnValue = store.get(k); });
@@ -195,6 +201,7 @@ app.whenReady().then(() => {
   }
   criarJanela();
   criarBandeja();
+  nativeTheme.on('updated', () => janela && janela.webContents.executeJavaScript('window.aplicarTema && window.aplicarTema()').catch(() => { }));
   setTimeout(verificar, 20 * 1000);
   setInterval(verificar, INTERVALO_MIN * 60 * 1000);
 });

@@ -36,6 +36,44 @@ public class Bridge {
         }).start();
     }
 
+    /** GET com cabeçalhos (JSON) — usado para Fundamentus e Bolsai. */
+    @JavascriptInterface
+    public void fetchCom(final String url, final String cabecalhos, final String cbId) {
+        new Thread(() -> {
+            try {
+                JSONObject h = cabecalhos == null || cabecalhos.isEmpty() ? null : new JSONObject(cabecalhos);
+                responder(cbId, true, Http.get(url, h));
+            } catch (Exception e) {
+                responder(cbId, false, String.valueOf(e.getMessage()));
+            }
+        }).start();
+    }
+
+    /** Tema do celular: true = escuro. */
+    @JavascriptInterface
+    public boolean temaSistemaEscuro() {
+        int m = act.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+        return m == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    /** Cor das barras do Android conforme o tema do app. */
+    @JavascriptInterface
+    public void barras(final String cor, final boolean claro) {
+        act.runOnUiThread(() -> {
+            try {
+                int c = android.graphics.Color.parseColor(cor);
+                android.view.Window w = act.getWindow();
+                w.setStatusBarColor(c);
+                w.setNavigationBarColor(c);
+                web.setBackgroundColor(c);
+                int f = w.getDecorView().getSystemUiVisibility();
+                int luz = android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                w.getDecorView().setSystemUiVisibility(claro ? (f | luz) : (f & ~luz));
+            } catch (Exception ignored) {
+            }
+        });
+    }
+
     @JavascriptInterface
     public String load(String chave) {
         return Store.get(act, chave, "");

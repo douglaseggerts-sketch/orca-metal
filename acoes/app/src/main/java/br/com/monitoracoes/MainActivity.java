@@ -78,6 +78,14 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    public void onConfigurationChanged(android.content.res.Configuration nova) {
+        super.onConfigurationChanged(nova);
+        if (web != null) {
+            web.evaluateJavascript("window.aplicarTema && window.aplicarTema()", null);
+        }
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
         if (web != null) {
