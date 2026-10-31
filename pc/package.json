@@ -1,7 +1,7 @@
 {
   "name": "monitor-acoes",
   "productName": "Monitor de Acoes",
-  "version": "1.0.0",
+  "version": "1.4.0",
   "description": "Cotações, médias móveis e alertas de compra e venda",
   "author": "Promech",
   "main": "main.js",
