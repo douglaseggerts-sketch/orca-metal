@@ -34,10 +34,11 @@ final class AlertEngine {
         final List<Double> fech = new ArrayList<>();
     }
 
-    static Serie baixar(String simbolo, boolean semanal) throws Exception {
+    static Serie baixar(String simbolo, String tf) throws Exception {
         String url = "https://query1.finance.yahoo.com/v8/finance/chart/"
                 + URLEncoder.encode(simbolo, "UTF-8")
-                + (semanal ? "?range=10y&interval=1wk" : "?range=2y&interval=1d");
+                + ("m".equals(tf) ? "?range=max&interval=1mo"
+                : "w".equals(tf) ? "?range=10y&interval=1wk" : "?range=2y&interval=1d");
         JSONObject j = new JSONObject(Http.get(url));
         JSONObject chart = j.getJSONObject("chart");
         JSONArray res = chart.optJSONArray("result");
@@ -50,12 +51,22 @@ final class AlertEngine {
         s.moeda = meta.optString("currency", "BRL");
         JSONArray close = r.getJSONObject("indicators").getJSONArray("quote")
                 .getJSONObject(0).optJSONArray("close");
+        JSONArray ts = r.optJSONArray("timestamp");
+        List<Long> tempos = new ArrayList<>();
         if (close != null) {
             for (int i = 0; i < close.length(); i++) {
                 if (!close.isNull(i)) {
                     s.fech.add(close.getDouble(i));
+                    tempos.add(ts != null ? ts.optLong(i, 0) : 0);
                 }
             }
+        }
+        // o Yahoo às vezes repete a semana/mês atual em duas linhas: fica só a última
+        int n = s.fech.size();
+        while (n >= 2 && mesmoPeriodo(tempos.get(n - 2), tempos.get(n - 1), tf)) {
+            s.fech.remove(n - 2);
+            tempos.remove(n - 2);
+            n--;
         }
         s.preco = meta.optDouble("regularMarketPrice", Double.NaN);
         if (Double.isNaN(s.preco)) {
@@ -69,6 +80,18 @@ final class AlertEngine {
             s.fech.add(s.preco);
         }
         return s;
+    }
+
+    static boolean mesmoPeriodo(long a, long b, String tf) {
+        if (a == 0 || b == 0) {
+            return false;
+        }
+        if ("w".equals(tf)) {
+            return Math.abs(b - a) < 6 * 86400L;
+        }
+        java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("m".equals(tf) ? "yyyy-MM" : "yyyy-MM-dd", Locale.US);
+        f.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+        return f.format(new java.util.Date(a * 1000)).equals(f.format(new java.util.Date(b * 1000)));
     }
 
     /** Último valor da média móvel (SMA ou EMA). Período 1 devolve o próprio preço. */
@@ -173,21 +196,23 @@ final class AlertEngine {
                 try {
                     String id = a.optString("id");
                     String tipo = a.optString("tipo");
-                    boolean semanal = "w".equals(a.optString("tf", "d"))
-                            && (tipo.startsWith("cruza") || tipo.startsWith("ifr"));
-                    String chave = semanal ? "w" : "d";
+                    boolean indicador = tipo.startsWith("cruza") || tipo.startsWith("ifr");
+                    String chave = indicador ? a.optString("tf", "d") : "d";
+                    if (!"w".equals(chave) && !"m".equals(chave)) {
+                        chave = "d";
+                    }
                     Serie s = cache.get(chave);
                     if (s == null) {
                         try {
-                            s = baixar(sym, semanal);
+                            s = baixar(sym, chave);
                         } catch (Exception ex) {
                             if (!erros.contains(rotulo(sym))) erros.add(rotulo(sym));
                             continue;
                         }
                         cache.put(chave, s);
                     }
-                    String sufixo = tipo.startsWith("cruza") || tipo.startsWith("ifr")
-                            ? (semanal ? " (semanal)" : " (diário)") : "";
+                    String sufixo = !indicador ? ""
+                            : "m".equals(chave) ? " (mensal)" : "w".equals(chave) ? " (semanal)" : " (diário)";
                     JSONObject m = new JSONObject();
                     String titulo = null;
                     String texto = null;

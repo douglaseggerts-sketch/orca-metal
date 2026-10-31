@@ -196,7 +196,9 @@ let view = 'lista', atual = null, periodo = ler('periodo', '5A'), modo = ler('mo
 // anos exibidos (null = todo o histórico)
 const PERIODOS = { '3M': 0.25, '6M': 0.5, '1A': 1, '2A': 2, '5A': 5, 'Máx': null };
 if (!(periodo in PERIODOS)) periodo = '5A';
-const nomeTF = t => t === 'w' ? 'semanal' : 'diário';
+const nomeTF = t => t === 'm' ? 'mensal' : t === 'w' ? 'semanal' : 'diário';
+const BARRAS_ANO = { d: 252, w: 52, m: 12 };
+const URL_TF = { d: '?range=10y&interval=1d', w: '?range=max&interval=1wk', m: '?range=max&interval=1mo' };
 
 /* ===================== Utilidades ===================== */
 const $ = id => document.getElementById(id);
@@ -215,7 +217,7 @@ function dinheiro(v, moeda) {
   catch (e) { return v.toFixed(2); }
 }
 const num = (v, d = 2) => (v == null || isNaN(v)) ? '—' : v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
-const pct = v => (v > 0 ? '+' : '') + num(v) + '%';
+const pct = v => { const r = Math.round(v * 100) / 100 || 0; return (r > 0 ? '+' : '') + num(r) + '%'; };
 const dataBR = t => new Date(t * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
 const nomeMM = m => (m.p <= 1 ? 'Preço' : (m.t === 'EMA' ? 'MME' : 'MM') + m.p);
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('on'), 2600); }
@@ -281,9 +283,12 @@ function interpretar(txt) {
 }
 async function buscarCotacao(sym) {
   const d = interpretar(await chamar('fetch', URL_Y + encodeURIComponent(sym) + '?range=5d&interval=1d'));
-  const p = d.pts;
+  // um ponto por dia (fora do pregão o Yahoo repete o último dia)
+  const porDia = {};
+  d.pts.forEach(x => porDia[new Date((x.t - 3 * 3600) * 1000).toISOString().slice(0, 10)] = x);
+  const p = Object.keys(porDia).sort().map(k => porDia[k]);
   let anterior = p.length >= 2 ? p[p.length - 2].c : null;
-  // se o último ponto não for de hoje, a variação é contra o último fechamento
+  // se o último ponto não for de hoje e o preço já mudou, a variação é contra o último fechamento
   if (p.length && Math.abs(p[p.length - 1].c - d.preco) > 1e-9 && (Date.now() / 1000 - p[p.length - 1].t) > 86400) anterior = p[p.length - 1].c;
   const q = { preco: d.preco, moeda: d.moeda, nome: d.nome, var: anterior ? (d.preco / anterior - 1) * 100 : null };
   cotacoes[sym] = q;
@@ -292,8 +297,15 @@ async function buscarCotacao(sym) {
 async function buscarHistorico(sym, f) {
   historico[sym] = historico[sym] || {};
   if (historico[sym][f]) return historico[sym];
-  const url = URL_Y + encodeURIComponent(sym) + (f === 'd' ? '?range=10y&interval=1d' : '?range=max&interval=1wk');
+  const url = URL_Y + encodeURIComponent(sym) + URL_TF[f];
   const d = interpretar(await chamar('fetch', url));
+  // junta a última barra repetida da mesma semana/mês (o Yahoo às vezes manda duas)
+  const mesmo = (x, y) => f === 'm' ? new Date(x.t * 1000).toISOString().slice(0, 7) === new Date(y.t * 1000).toISOString().slice(0, 7)
+    : f === 'w' ? Math.abs(y.t - x.t) < 6 * 86400 : new Date(x.t * 1000).toISOString().slice(0, 10) === new Date(y.t * 1000).toISOString().slice(0, 10);
+  while (d.pts.length >= 2 && mesmo(d.pts[d.pts.length - 2], d.pts[d.pts.length - 1])) {
+    const b = d.pts.pop(), a = d.pts[d.pts.length - 1];
+    a.c = b.c; a.h = Math.max(a.h, b.h); a.l = Math.min(a.l, b.l); a.v = Math.max(a.v, b.v);
+  }
   if (d.pts.length && d.preco != null) { const u = d.pts[d.pts.length - 1]; u.c = d.preco; u.h = Math.max(u.h, d.preco); u.l = Math.min(u.l, d.preco); }
   Object.assign(historico[sym], { [f]: d.pts, nome: d.nome, moeda: d.moeda, preco: d.preco });
   return historico[sym];
@@ -326,50 +338,112 @@ function atualizar() {
   else atualizarLista();
 }
 
-/* ===================== Tela: lista ===================== */
+/* ===================== Tela: lista (agrupada pelas listas da carteira) ===================== */
+let listaSel = ler('listaSel', 'todas');
+// lista da ação: a da carteira (se estiver lá) ou "sem lista"
+function itemDe(sym) { return cart.itens.find(i => i.sym === sym); }
+function listaDe(sym) { const it = itemDe(sym); return it && catDe(it.cat) ? it.cat : '_sem'; }
+function todosSimbolos() {
+  const v = []; cart.itens.forEach(i => { if (i.sym && !v.includes(i.sym)) v.push(i.sym); });
+  lista.forEach(s => { if (!v.includes(s)) v.push(s); });
+  return v;
+}
+function gruposLista() {
+  const g = cart.cats.filter(c => c.nome !== 'CAIXA' || cart.itens.some(i => i.cat === c.id && i.sym)).map(c => ({ id: c.id, nome: c.nome, cor: c.cor }));
+  g.push({ id: '_sem', nome: 'SEM LISTA', cor: '#5A6372' });
+  return g;
+}
 function telaLista() {
   $('titulo').textContent = 'Ações';
-  let h = `<div class="card"><div class="linha">
-      <input id="novo" placeholder="Código: PETR4, VALE3, AAPL…" autocapitalize="characters" autocomplete="off"
-        onkeydown="if(event.key==='Enter')adicionar()">
+  const syms = todosSimbolos(), grupos = gruposLista();
+  if (listaSel !== 'todas' && !grupos.some(g => g.id === listaSel)) listaSel = 'todas';
+  const conta = id => syms.filter(s => listaDe(s) === id).length;
+  const destino = listaSel === 'todas' ? (grupos[0] ? grupos[0].id : '_sem') : listaSel;
+  let h = `<div class="chips" style="margin:0 0 12px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px">
+      <span class="chip ${listaSel === 'todas' ? 'on' : ''}" style="flex:none;${listaSel === 'todas' ? 'border-color:var(--ouro);color:#fff' : ''}" onclick="selLista('todas')">Todas (${syms.length})</span>
+      ${grupos.filter(g => g.id !== '_sem' || conta('_sem')).map(g => `<span class="chip ${listaSel === g.id ? 'on' : ''}" style="flex:none;${listaSel === g.id ? 'border-color:' + g.cor + ';color:#fff' : ''}" onclick="selLista('${g.id}')"><i style="background:${g.cor}"></i>${esc(g.nome)} (${conta(g.id)})</span>`).join('')}
+      <span class="chip" style="flex:none" onclick="editarListas()">✎ Listas</span></div>
+    <div class="card"><div class="linha">
+      <input id="novo" placeholder="Código: PETR4, HGLG11, AAPL…" autocapitalize="characters" autocomplete="off" onkeydown="if(event.key==='Enter')adicionar()">
       <button class="btn" onclick="adicionar()">Adicionar</button></div>
-      <div class="sub" style="margin-top:8px">Ações da B3 pelo código (PETR4). Americanas pelo ticker (AAPL). ETFs e FIIs também funcionam (BOVA11, HGLG11).</div></div>`;
-  if (!lista.length) h += `<div class="vazio">Nenhuma ação na lista.</div>`;
-  h += lista.map(s => {
-    const q = cotacoes[s];
-    const cl = q && q.var != null ? (q.var >= 0 ? 'alta' : 'baixa') : 'sub';
-    return `<div class="ativo" onclick="ir('detalhe','${esc(s)}')">
-      <div class="nome"><div class="tk">${esc(rot(s))}<span class="tag">${mercado(s)}</span></div>
-        <div class="ds">${q ? esc(q.nome) : 'carregando…'}</div></div>
-      <div class="pr"><div>${q ? dinheiro(q.preco, q.moeda) : '—'}</div>
-        <div class="${cl}" style="font-size:13px">${q && q.var != null ? pct(q.var) : (q && q.erro ? 'sem dados' : '')}</div></div>
-      <button class="x" onclick="event.stopPropagation();remover('${esc(s)}')" aria-label="Remover">×</button></div>`;
-  }).join('');
+      <div class="linha" style="margin-top:8px"><span class="sub">na lista</span>
+        <select id="novoLista" style="flex:1">${grupos.map(g => `<option value="${g.id}" ${g.id === destino ? 'selected' : ''}>${esc(g.nome)}</option>`).join('')}</select></div></div>`;
+  const mostrar = listaSel === 'todas' ? grupos : grupos.filter(g => g.id === listaSel);
+  let algum = false;
+  mostrar.forEach(g => {
+    const ss = syms.filter(s => listaDe(s) === g.id);
+    if (!ss.length) { if (listaSel !== 'todas') h += `<div class="vazio">Nenhuma ação em ${esc(g.nome)}. Digite um código acima.</div>`; return; }
+    algum = true;
+    if (listaSel === 'todas') h += `<div class="linha" style="margin:14px 2px 8px"><span class="bola" style="background:${g.cor}"></span><b style="font-size:13px;letter-spacing:.5px">${esc(g.nome)}</b><span class="sub">· ${ss.length}</span></div>`;
+    h += ss.map(s => linhaAcao(s, g)).join('');
+  });
+  if (!algum && listaSel === 'todas') h += `<div class="vazio">Nenhuma ação. Digite um código acima.</div>`;
   const ult = ler('ultimaVerificacao', null);
   if (ult) h += `<div class="sub" style="text-align:center;margin-top:10px">Última verificação de alertas: ${new Date(+ult).toLocaleString('pt-BR')}</div>`;
   $('tela').innerHTML = h;
 }
+function linhaAcao(s, g) {
+  const q = cotacoes[s], it = itemDe(s);
+  const cl = q && q.var != null ? (q.var >= 0 ? 'alta' : 'baixa') : 'sub';
+  const p = q && q.preco != null ? q.preco : it && it.ult;
+  const sinal = it && it.alvo > 0 && p != null ? (p <= it.alvo ? `<span class="tag" style="background:#0F3D2A;color:var(--alta);border-color:#19C37D">COMPRA</span>` : '') : '';
+  const pos = it && it.qtd > 0 ? ` · ${num(+it.qtd, it.qtd % 1 ? 2 : 0)} un` : '';
+  return `<div class="ativo" onclick="ir('detalhe','${esc(s)}')">
+    <div class="nome"><div class="tk">${esc(rot(s))}<span class="tag" style="cursor:pointer;border-color:${g.cor}" onclick="event.stopPropagation();moverAcao('${esc(s)}')">${esc(g.nome)} ▾</span>${sinal}</div>
+      <div class="ds">${q && q.nome ? esc(q.nome) : (q && q.erro ? 'sem dados' : 'carregando…')}${pos}</div></div>
+    <div class="pr"><div>${p != null ? dinheiro(p, q && q.moeda) : '—'}</div>
+      <div class="${cl}" style="font-size:13px">${q && q.var != null ? pct(q.var) : ''}</div></div>
+    <button class="x" onclick="event.stopPropagation();remover('${esc(s)}')" aria-label="Remover">×</button></div>`;
+}
+function selLista(id) { listaSel = id; gravar('listaSel', id); telaLista(); }
 async function atualizarLista() {
   if (view === 'lista') telaLista();
-  await Promise.all(lista.map(s => buscarCotacao(s).catch(() => { cotacoes[s] = Object.assign(cotacoes[s] || {}, { erro: true }); })));
+  await Promise.all(todosSimbolos().map(s => buscarCotacao(s).catch(() => { cotacoes[s] = Object.assign(cotacoes[s] || {}, { erro: true }); })));
   if (view === 'lista') telaLista();
 }
+// coloca a ação numa lista (ou tira de todas, com "_sem")
+function porNaLista(s, cat) {
+  const it = itemDe(s);
+  if (cat === '_sem') {
+    if (it) {
+      if (it.qtd > 0 && !confirm(`${rot(s)} tem ${num(+it.qtd, 0)} unidade(s) na carteira. Tirar da carteira?`)) return false;
+      cart.itens = cart.itens.filter(i => i !== it); salvarCart();
+    }
+    if (!lista.includes(s)) { lista.push(s); gravar('lista', lista); }
+  } else {
+    if (it) it.cat = cat;
+    else cart.itens.push({ id: novoId(), cat, sym: s, qtd: 0, pm: null, ult: cotacoes[s] ? cotacoes[s].preco : null });
+    salvarCart();
+    if (lista.includes(s)) { lista = lista.filter(x => x !== s); gravar('lista', lista); }
+  }
+  return true;
+}
 async function adicionar() {
-  const s = normalizar($('novo').value);
+  const s = normalizar($('novo').value), cat = $('novoLista').value;
   if (!s) return;
-  if (lista.includes(s)) { toast(rot(s) + ' já está na lista'); return; }
+  if (todosSimbolos().includes(s) && listaDe(s) === cat) { toast(rot(s) + ' já está nessa lista'); return; }
   $('novo').disabled = true;
   try {
     await buscarCotacao(s);
-    lista.push(s); gravar('lista', lista);
-    toast(rot(s) + ' adicionada');
+    if (porNaLista(s, cat)) toast(rot(s) + ' adicionada em ' + (catDe(cat) ? catDe(cat).nome : 'Sem lista'));
   } catch (e) {
     toast('Não encontrei "' + rot(s) + '". Confira o código.');
   }
   telaLista();
 }
+function moverAcao(s) {
+  const atualL = listaDe(s);
+  abrirFolha(`<h2>Mover ${esc(rot(s))} para…</h2>
+    ${gruposLista().map(g => `<button class="btn sec" style="width:100%;margin-bottom:8px;text-align:left;${g.id === atualL ? 'border-color:' + g.cor : ''}"
+      onclick="if(porNaLista('${esc(s)}','${g.id}')){fecharFolha();telaLista()}"><span class="bola" style="display:inline-block;background:${g.cor};margin-right:8px"></span>${esc(g.nome)}${g.id === atualL ? ' (atual)' : ''}</button>`).join('')}
+    <button class="btn sec" style="width:100%" onclick="fecharFolha()">Cancelar</button>`);
+}
 function remover(s) {
-  if (!confirm('Remover ' + rot(s) + ' da lista?')) return;
+  const it = itemDe(s);
+  if (it && it.qtd > 0) {
+    if (!confirm(`${rot(s)} tem ${num(+it.qtd, 0)} unidade(s) na carteira. Remover mesmo assim (sai da carteira também)?`)) return;
+  } else if (!confirm('Remover ' + rot(s) + '?')) return;
+  if (it) { cart.itens = cart.itens.filter(i => i !== it); registrarMes(); salvarCart(); }
   lista = lista.filter(x => x !== s); gravar('lista', lista); telaLista();
 }
 
@@ -384,7 +458,7 @@ async function telaDetalhe() {
     <div class="sub" id="dNome">${q ? esc(q.nome) : ''} · ${mercado(s)}</div>
     <div class="periodos">${Object.keys(PERIODOS).map(p => `<button class="${p === periodo ? 'on' : ''}" onclick="mudarPeriodo('${p}')">${p}</button>`).join('')}</div>
     <div class="linha" style="justify-content:space-between">
-      <div class="modo"><button id="tD" class="${tf === 'd' ? 'on' : ''}" onclick="mudarTF('d')">Diário</button><button id="tW" class="${tf === 'w' ? 'on' : ''}" onclick="mudarTF('w')">Semanal</button></div>
+      <div class="modo"><button id="tD" class="${tf === 'd' ? 'on' : ''}" onclick="mudarTF('d')">Diário</button><button id="tW" class="${tf === 'w' ? 'on' : ''}" onclick="mudarTF('w')">Semanal</button><button id="tM" class="${tf === 'm' ? 'on' : ''}" onclick="mudarTF('m')">Mensal</button></div>
       <div class="modo"><button id="mC" class="${modo === 'candle' ? 'on' : ''}" onclick="mudarModo('candle')">Candle</button><button id="mL" class="${modo === 'linha' ? 'on' : ''}" onclick="mudarModo('linha')">Linha</button></div></div>
     <div class="info" id="info"></div>
     <div class="grafico" id="graf"><div class="carregando">Carregando…</div></div>
@@ -415,7 +489,7 @@ async function telaDetalhe() {
           <input id="aIfrNivel" type="number" inputmode="decimal" min="1" max="99" placeholder="Nível do IFR">
           <input id="aIfrP" type="number" inputmode="numeric" min="2" value="${ifrCfg.p}" placeholder="Períodos do IFR">
         </div>
-        <select id="aTF" style="display:none"><option value="w" ${tf === 'w' ? 'selected' : ''}>No gráfico semanal</option><option value="d" ${tf === 'd' ? 'selected' : ''}>No gráfico diário</option></select>
+        <select id="aTF" style="display:none"><option value="d" ${tf === 'd' ? 'selected' : ''}>No gráfico diário</option><option value="w" ${tf === 'w' ? 'selected' : ''}>No gráfico semanal</option><option value="m" ${tf === 'm' ? 'selected' : ''}>No gráfico mensal</option></select>
         <input id="aNota" placeholder="Anotação (opcional)">
         <button class="btn" onclick="criarAlerta()">Criar alerta</button>
       </div>
@@ -433,7 +507,7 @@ async function telaDetalhe() {
 }
 function mudarTF(t) {
   tf = t; gravar('tf', t);
-  $('tD').classList.toggle('on', t === 'd'); $('tW').classList.toggle('on', t === 'w');
+  $('tD').classList.toggle('on', t === 'd'); $('tW').classList.toggle('on', t === 'w'); $('tM').classList.toggle('on', t === 'm');
   desenharDetalhe();
 }
 function mudarPeriodo(p) {
@@ -443,7 +517,7 @@ function mudarPeriodo(p) {
 }
 async function desenharDetalhe() {
   const s = atual, f = tf, anos = PERIODOS[periodo];
-  const n = anos == null ? Infinity : Math.round(anos * (f === 'w' ? 52 : 252));
+  const n = anos == null ? Infinity : Math.max(6, Math.round(anos * BARRAS_ANO[f]));
   let h;
   try { h = await buscarHistorico(s, f); }
   catch (e) { if (view === 'detalhe') $('graf').innerHTML = `<div class="carregando">Não consegui carregar o histórico.<br><span class="sub">${esc(e.message).slice(0, 120)}</span></div>`; return; }
@@ -528,7 +602,7 @@ const grafico = {
       const i = Math.round((pts.length - 1) * (k + 0.5) / nd);
       const d = new Date(pts[i].t * 1000);
       g.fillStyle = '#6E7887';
-      g.fillText(d.toLocaleDateString('pt-BR', f === 'w' ? { month: 'short', year: '2-digit' } : { day: '2-digit', month: 'short' }), X(i), H - 6);
+      g.fillText(d.toLocaleDateString('pt-BR', f !== 'd' ? { month: 'short', year: '2-digit' } : { day: '2-digit', month: 'short' }), X(i), H - 6);
     }
     g.textAlign = 'left';
     // linhas de alerta
@@ -723,7 +797,7 @@ function telaMedias() {
         <input id="mC" type="color" value="${CORES[medias.length % CORES.length]}">
       </div>
       <button class="btn" onclick="addMedia()">Adicionar</button>
-      <div class="sub">MM = média aritmética (a “Média Móvel A” do Profit). No gráfico semanal os períodos contam em semanas.</div>
+      <div class="sub">MM = média aritmética (a “Média Móvel A” do Profit). No gráfico semanal os períodos contam em semanas, no mensal em meses.</div>
     </div></div>
     <div class="card"><div class="linha" style="margin-bottom:10px"><h2 style="flex:1;margin:0">IFR (RSI)</h2>
       <label class="sw"><input type="checkbox" ${ifrCfg.on ? 'checked' : ''} onchange="ifrCfg.on=this.checked;gravar('ifr',ifrCfg)"><span></span></label></div>
@@ -1076,7 +1150,7 @@ function editarListas() {
   abrirFolha(`<h2>Listas e metas</h2><div class="sub" style="margin-bottom:10px">Nome, cor e % da carteira que cada lista deve ter.</div>
     ${linhas}<div id="somaMetas" class="sub"></div>
     <div class="linha" style="margin-top:12px"><button class="btn sec" onclick="novaLista()">+ Nova lista</button><span style="flex:1"></span>
-      <button class="btn" onclick="salvarCart();fecharFolha();telaCarteira()">Pronto</button></div>`);
+      <button class="btn" onclick="salvarCart();fecharFolha();render()">Pronto</button></div>`);
   somaMetasLista();
 }
 function somaMetasLista() {
@@ -1316,7 +1390,8 @@ function simulacao() {
         const sem = url.includes('1wk'), n = url.includes('5d') ? 5 : sem ? 700 : 2500;
         const full = serie(sym, 3500, 1), preco = full.c[full.c.length - 1];
         let ts = full.ts.slice(-n), c = full.c.slice(-n);
-        if (sem) { ts = []; c = []; for (let i = full.c.length - 1; i >= 0; i -= 5) { ts.unshift(full.ts[i]); c.unshift(full.c[i]); } }
+        const passo = url.includes('1mo') ? 21 : sem ? 5 : 0;
+        if (passo) { ts = []; c = []; for (let i = full.c.length - 1; i >= 0; i -= passo) { ts.unshift(full.ts[i]); c.unshift(full.c[i]); } }
         window.__cb(id, true, JSON.stringify({ chart: { result: [{ meta: { regularMarketPrice: preco, currency: sym.endsWith('.SA') ? 'BRL' : 'USD', shortName: nomes[sym] || sym },
           timestamp: ts, indicators: { quote: [(() => { const cc = url.includes('5d') ? full.c.slice(-5) : c;
             const o = cc.map((x, i) => i ? cc[i - 1] : x);

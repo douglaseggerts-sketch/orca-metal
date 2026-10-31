@@ -6,11 +6,22 @@
 
 const URL_Y = 'https://query1.finance.yahoo.com/v8/finance/chart/';
 
-async function baixar(baixarTexto, sym, semanal) {
-  const j = JSON.parse(await baixarTexto(URL_Y + encodeURIComponent(sym) + (semanal ? '?range=10y&interval=1wk' : '?range=2y&interval=1d')));
+const URL_TF = { d: '?range=2y&interval=1d', w: '?range=10y&interval=1wk', m: '?range=max&interval=1mo' };
+function mesmoPeriodo(a, b, tf) {
+  if (!a || !b) return false;
+  if (tf === 'w') return Math.abs(b - a) < 6 * 86400;
+  const n = tf === 'm' ? 7 : 10;
+  return new Date(a * 1000).toISOString().slice(0, n) === new Date(b * 1000).toISOString().slice(0, n);
+}
+async function baixar(baixarTexto, sym, tf) {
+  const j = JSON.parse(await baixarTexto(URL_Y + encodeURIComponent(sym) + URL_TF[tf]));
   const r = j.chart && j.chart.result && j.chart.result[0];
   if (!r) throw new Error('sem dados para ' + sym);
-  const c = ((r.indicators.quote[0] || {}).close || []).filter(x => x != null);
+  const cc = (r.indicators.quote[0] || {}).close || [], ts = r.timestamp || [];
+  const c = [], t = [];
+  cc.forEach((x, i) => { if (x != null) { c.push(x); t.push(ts[i] || 0); } });
+  // o Yahoo às vezes repete a semana/mês atual em duas linhas: fica só a última
+  while (c.length >= 2 && mesmoPeriodo(t[t.length - 2], t[t.length - 1], tf)) { c.splice(c.length - 2, 1); t.splice(t.length - 2, 1); }
   let preco = r.meta.regularMarketPrice;
   if (preco == null) {
     if (!c.length) throw new Error('sem preço para ' + sym);
@@ -78,14 +89,13 @@ async function verificar(store, baixarTexto, notificar) {
     const cache = {};
     for (const a of porAtivo[sym]) {
       const ind = /^(cruza|ifr)/.test(a.tipo || '');
-      const semanal = ind && a.tf === 'w';
-      const k = semanal ? 'w' : 'd';
+      const k = ind && (a.tf === 'w' || a.tf === 'm') ? a.tf : 'd';
       if (!cache[k]) {
-        try { cache[k] = await baixar(baixarTexto, sym, semanal); }
+        try { cache[k] = await baixar(baixarTexto, sym, k); }
         catch (e) { if (!erros.includes(rot(sym))) erros.push(rot(sym)); continue; }
       }
       const s = cache[k];
-      const sufixo = ind ? (semanal ? ' (semanal)' : ' (diário)') : '';
+      const sufixo = ind ? (k === 'm' ? ' (mensal)' : k === 'w' ? ' (semanal)' : ' (diário)') : '';
       const m = {};
       let titulo = null, texto = null;
       if (a.tipo === 'abaixo' || a.tipo === 'acima') {
