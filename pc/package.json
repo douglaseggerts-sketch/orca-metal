@@ -1,0 +1,34 @@
+{
+  "name": "monitor-acoes",
+  "productName": "Monitor de Acoes",
+  "version": "1.0.0",
+  "description": "Cotações, médias móveis e alertas de compra e venda",
+  "author": "Promech",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "br.com.monitoracoes",
+    "productName": "Monitor de Acoes",
+    "files": ["main.js", "preload.js", "motor.js", "icone.png", "ui/**"],
+    "win": {
+      "target": "nsis",
+      "icon": "icone.png",
+      "artifactName": "MonitorAcoes-Instalador.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Monitor de Ações"
+    }
+  }
+}

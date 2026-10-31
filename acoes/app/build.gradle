@@ -1,0 +1,41 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'br.com.monitoracoes'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'br.com.monitoracoes'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    signingConfigs {
+        // chave fixa: cada APK novo instala por cima do anterior sem perder os dados
+        fixa {
+            storeFile file('assinatura.keystore')
+            storePassword 'monitoracoes'
+            keyAlias 'monitoracoes'
+            keyPassword 'monitoracoes'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.fixa
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.fixa
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
