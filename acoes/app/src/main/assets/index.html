@@ -339,7 +339,8 @@ function interpretar(txt) {
   return { pts, preco: m.regularMarketPrice, moeda: m.currency || 'BRL', nome: m.shortName || m.longName || '', hora: m.regularMarketTime || null, volume: m.regularMarketVolume || null };
 }
 async function buscarCotacao(sym) {
-  const d = interpretar(await chamar('fetch', URL_Y + encodeURIComponent(sym) + '?range=5d&interval=1d'));
+  const txt = await chamar('fetch', URL_Y + encodeURIComponent(sym) + '?range=5d&interval=1d');
+  const d = interpretar(txt);
   // um ponto por dia (fora do pregão o Yahoo repete o último dia)
   const porDia = {};
   d.pts.forEach(x => porDia[new Date((x.t - 3 * 3600) * 1000).toISOString().slice(0, 10)] = x);
@@ -347,6 +348,14 @@ async function buscarCotacao(sym) {
   let anterior = p.length >= 2 ? p[p.length - 2].c : null;
   // se o último ponto não for de hoje e o preço já mudou, a variação é contra o último fechamento
   if (p.length && Math.abs(p[p.length - 1].c - d.preco) > 1e-9 && (Date.now() / 1000 - p[p.length - 1].t) > 86400) anterior = p[p.length - 1].c;
+  // fechamento do pregão anterior ao último negócio (os dias são contados no horário de Brasília)
+  const diaBR = t => new Date((t - 3 * 3600) * 1000).toISOString().slice(0, 10);
+  if (d.hora) {
+    const dia = diaBR(d.hora);
+    // as barras diárias do Yahoo podem ter horário de meia-noite; considera "mesmo dia" pela data do último negócio
+    const antes = d.pts.filter(x => diaBR(x.t + 3 * 3600) < dia && diaBR(x.t) < dia);
+    if (antes.length) anterior = antes[antes.length - 1].c;
+  }
   const q = { preco: d.preco, moeda: d.moeda, nome: d.nome, var: anterior ? (d.preco / anterior - 1) * 100 : null, hora: d.hora,
     volume: d.volume != null ? d.volume : (p.length ? p[p.length - 1].v : null) };
   cotacoes[sym] = q;
@@ -449,7 +458,7 @@ function telaLista() {
       <button class="btn sec peq" onclick="formAdicionar()"><span style="color:var(--ouro);font-size:16px">＋</span> Adicionar</button>
       <select onchange="filtroLista=this.value;gravar('filtroLista',filtroLista);telaLista()">${Object.entries(FILTROS).map(([k, n]) => `<option value="${k}" ${k === filtroLista ? 'selected' : ''}>${n}</option>`).join('')}</select>
       <div class="ordem"><button onclick="ordem.desc=!ordem.desc;gravar('ordem',ordem);telaLista()" aria-label="Inverter ordem">${ordem.desc ? '↓' : '↑'}</button>
-        <select onchange="ordem.k=this.value;gravar('ordem',ordem);telaLista()">${Object.entries(ORDENS).map(([k, n]) => `<option value="${k}" ${k === ordem.k ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+        <select onchange="ordem.k=this.value;gravar('ordem',ordem);telaLista();if(['dy','pl','pvp'].includes(ordem.k))carregarIndicadoresLista()">${Object.entries(ORDENS).map(([k, n]) => `<option value="${k}" ${k === ordem.k ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
     </div>`;
   if (!ss.length) h += `<div class="vazio">${syms.length ? 'Nenhuma ação com esse filtro.' : 'Nenhuma ação. Toque em “Adicionar”.'}</div>`;
   h += `<div class="cotacoes">${ss.map(s => linhaAcao(s)).join('')}</div>`;
@@ -464,13 +473,12 @@ function linhaAcao(s) {
   const posicao = it && it.qtd > 0, f = fundDe(s);
   const p = q.preco != null ? q.preco : it && it.ult;
   const compra = it && it.alvo > 0 && p != null && p <= it.alvo;
-  const ind = f ? [f.dy != null ? 'DY ' + num(f.dy, 1) + '%' : '', f.pl != null ? 'P/L ' + num(f.pl, 1) : '', f.pvp != null ? 'P/VP ' + num(f.pvp) : ''].filter(Boolean).join(' · ') : '';
   return `<div class="cot" data-sym="${esc(s)}" onclick="ir('detalhe','${esc(s)}')" style="border-left-color:${listaSel === 'todas' && g.cor ? g.cor : 'transparent'}">
     <div class="c1"><span class="tk2 ${posicao ? 'pos' : ''}" style="${posicao ? 'background:' + cor + ';color:#fff' : 'color:' + cor}">${esc(rot(s))}</span>
       <span class="nm">${q.nome ? esc(q.nome) : q.erro ? 'sem dados' : '…'}</span></div>
     <div class="c2"><b>${p != null ? num(p) : '—'}</b><span class="nm">${horaCot(q)}</span></div>
     <div class="c3"><b style="color:${cor}">${q.var != null ? pct(q.var) : ''}</b><span class="nm">${abrev(volFin(s))}</span></div>
-    ${ind || compra ? `<div class="c4">${compra ? '<span class="tag" style="background:var(--compraBg);color:var(--alta);border-color:var(--alta);margin:0 6px 0 0">COMPRA</span>' : ''}${ind}</div>` : ''}
+    ${compra ? `<div class="c4"><span class="tag" style="background:var(--compraBg);color:var(--alta);border-color:var(--alta);margin:0">COMPRA ≤ ${num(it.alvo)}</span></div>` : ''}
   </div>`;
 }
 // tocar e segurar (ou botão direito no PC) abre as opções da ação
@@ -505,7 +513,7 @@ async function atualizarLista() {
   if (view === 'lista') telaLista();
   await Promise.all(todosSimbolos().map(s => buscarCotacao(s).catch(() => { cotacoes[s] = Object.assign(cotacoes[s] || {}, { erro: true }); })));
   if (view === 'lista') telaLista();
-  carregarIndicadoresLista();
+  if (['dy', 'pl', 'pvp'].includes(ordem.k)) carregarIndicadoresLista();
 }
 let carregandoInd = false;
 async function carregarIndicadoresLista() {   // um por vez, para não sobrecarregar o Fundamentus
@@ -548,7 +556,7 @@ async function adicionar() {
     toast('Não encontrei "' + rot(s) + '". Confira o código.');
   }
   if ($('novo')) { $('novo').disabled = false; $('novo').focus(); }
-  telaLista(); carregarIndicadoresLista();
+  telaLista();
 }
 function moverAcao(s) {
   const atualL = listaDe(s);
