@@ -35,10 +35,13 @@ final class AlertEngine {
     }
 
     static Serie baixar(String simbolo, String tf) throws Exception {
+        // sempre barras diárias (period1/period2); semana e mês são montados aqui,
+        // porque o Yahoo nem sempre respeita o intervalo semanal/mensal pedido
+        long agora = System.currentTimeMillis() / 1000;
+        long anos = "d".equals(tf) ? 2 : 12;
         String url = "https://query1.finance.yahoo.com/v8/finance/chart/"
                 + URLEncoder.encode(simbolo, "UTF-8")
-                + ("m".equals(tf) ? "?range=max&interval=1mo"
-                : "w".equals(tf) ? "?range=10y&interval=1wk" : "?range=2y&interval=1d");
+                + "?period1=" + (agora - anos * 365 * 86400L) + "&period2=" + (agora + 86400) + "&interval=1d";
         JSONObject j = new JSONObject(Http.get(url));
         JSONObject chart = j.getJSONObject("chart");
         JSONArray res = chart.optJSONArray("result");
@@ -52,21 +55,21 @@ final class AlertEngine {
         JSONArray close = r.getJSONObject("indicators").getJSONArray("quote")
                 .getJSONObject(0).optJSONArray("close");
         JSONArray ts = r.optJSONArray("timestamp");
-        List<Long> tempos = new ArrayList<>();
+        // fechamento de cada dia/semana/mês = último fechamento diário do período
+        String chaveAnterior = null;
         if (close != null) {
             for (int i = 0; i < close.length(); i++) {
-                if (!close.isNull(i)) {
+                if (close.isNull(i)) {
+                    continue;
+                }
+                String k = chavePeriodo(ts != null ? ts.optLong(i, 0) : 0, tf);
+                if (k.equals(chaveAnterior)) {
+                    s.fech.set(s.fech.size() - 1, close.getDouble(i));
+                } else {
                     s.fech.add(close.getDouble(i));
-                    tempos.add(ts != null ? ts.optLong(i, 0) : 0);
+                    chaveAnterior = k;
                 }
             }
-        }
-        // o Yahoo às vezes repete a semana/mês atual em duas linhas: fica só a última
-        int n = s.fech.size();
-        while (n >= 2 && mesmoPeriodo(tempos.get(n - 2), tempos.get(n - 1), tf)) {
-            s.fech.remove(n - 2);
-            tempos.remove(n - 2);
-            n--;
         }
         s.preco = meta.optDouble("regularMarketPrice", Double.NaN);
         if (Double.isNaN(s.preco)) {
@@ -82,16 +85,19 @@ final class AlertEngine {
         return s;
     }
 
-    static boolean mesmoPeriodo(long a, long b, String tf) {
-        if (a == 0 || b == 0) {
-            return false;
+    /** Dia (AAAA-MM-DD), segunda-feira da semana ou mês (AAAA-MM), no horário de Brasília. */
+    static String chavePeriodo(long t, String tf) {
+        java.util.Calendar c = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        c.setTimeInMillis((t - 3 * 3600) * 1000);
+        if ("m".equals(tf)) {
+            return String.format(Locale.US, "%04d-%02d", c.get(java.util.Calendar.YEAR), c.get(java.util.Calendar.MONTH) + 1);
         }
         if ("w".equals(tf)) {
-            return Math.abs(b - a) < 6 * 86400L;
+            int dow = (c.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7;   // segunda = 0
+            c.add(java.util.Calendar.DAY_OF_MONTH, -dow);
         }
-        java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("m".equals(tf) ? "yyyy-MM" : "yyyy-MM-dd", Locale.US);
-        f.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
-        return f.format(new java.util.Date(a * 1000)).equals(f.format(new java.util.Date(b * 1000)));
+        return String.format(Locale.US, "%04d-%02d-%02d", c.get(java.util.Calendar.YEAR),
+                c.get(java.util.Calendar.MONTH) + 1, c.get(java.util.Calendar.DAY_OF_MONTH));
     }
 
     /** Último valor da média móvel (SMA ou EMA). Período 1 devolve o próprio preço. */

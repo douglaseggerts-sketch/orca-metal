@@ -255,7 +255,6 @@ const PERIODOS = { '3M': 0.25, '6M': 0.5, '1A': 1, '2A': 2, '5A': 5, 'Máx': nul
 if (!(periodo in PERIODOS)) periodo = '5A';
 const nomeTF = t => t === 'm' ? 'mensal' : t === 'w' ? 'semanal' : 'diário';
 const BARRAS_ANO = { d: 252, w: 52, m: 12 };
-const URL_TF = { d: '?range=10y&interval=1d', w: '?range=max&interval=1wk', m: '?range=max&interval=1mo' };
 
 /* ===================== Utilidades ===================== */
 const $ = id => document.getElementById(id);
@@ -361,21 +360,43 @@ async function buscarCotacao(sym) {
   cotacoes[sym] = q;
   return q;
 }
+// Data (no horário de Brasília) de um instante do Yahoo
+const diaDe = t => new Date((t - 3 * 3600) * 1000).toISOString().slice(0, 10);
+function chaveSemana(dia) {   // segunda-feira da semana
+  const d = new Date(dia + 'T12:00:00Z'), dow = (d.getUTCDay() + 6) % 7;
+  return new Date(d.getTime() - dow * 864e5).toISOString().slice(0, 10);
+}
+// monta candles semanais/mensais a partir dos diários (o Yahoo nem sempre respeita o intervalo pedido)
+function agregar(diarios, f) {
+  if (f === 'd') return diarios;
+  const out = [];
+  let chaveAtual = null, b = null;
+  diarios.forEach(p => {
+    const dia = diaDe(p.t), k = f === 'm' ? dia.slice(0, 7) : chaveSemana(dia);
+    if (k !== chaveAtual) { chaveAtual = k; b = { t: p.t, o: p.o, h: p.h, l: p.l, c: p.c, v: p.v || 0 }; out.push(b); }
+    else { b.h = Math.max(b.h, p.h); b.l = Math.min(b.l, p.l); b.c = p.c; b.v += p.v || 0; }
+  });
+  return out;
+}
 async function buscarHistorico(sym, f) {
   historico[sym] = historico[sym] || {};
-  if (historico[sym][f]) return historico[sym];
-  const url = URL_Y + encodeURIComponent(sym) + URL_TF[f];
-  const d = interpretar(await chamar('fetch', url));
-  // junta a última barra repetida da mesma semana/mês (o Yahoo às vezes manda duas)
-  const mesmo = (x, y) => f === 'm' ? new Date(x.t * 1000).toISOString().slice(0, 7) === new Date(y.t * 1000).toISOString().slice(0, 7)
-    : f === 'w' ? Math.abs(y.t - x.t) < 6 * 86400 : new Date(x.t * 1000).toISOString().slice(0, 10) === new Date(y.t * 1000).toISOString().slice(0, 10);
-  while (d.pts.length >= 2 && mesmo(d.pts[d.pts.length - 2], d.pts[d.pts.length - 1])) {
-    const b = d.pts.pop(), a = d.pts[d.pts.length - 1];
-    a.c = b.c; a.h = Math.max(a.h, b.h); a.l = Math.min(a.l, b.l); a.v = Math.max(a.v, b.v);
+  const h = historico[sym];
+  if (!h.base) {
+    // histórico diário completo (period1/period2 garante barras diárias)
+    const url = URL_Y + encodeURIComponent(sym) + '?period1=0&period2=' + Math.floor(Date.now() / 1000 + 86400) + '&interval=1d';
+    const d = interpretar(await chamar('fetch', url));
+    // um candle por dia: junta repetições do mesmo dia (o Yahoo às vezes manda o dia atual duas vezes)
+    const base = [];
+    d.pts.forEach(p => {
+      const u = base[base.length - 1];
+      if (u && diaDe(u.t) === diaDe(p.t)) { u.c = p.c; u.h = Math.max(u.h, p.h); u.l = Math.min(u.l, p.l); u.v = Math.max(u.v || 0, p.v || 0); }
+      else base.push(Object.assign({}, p));
+    });
+    if (base.length && d.preco != null) { const u = base[base.length - 1]; u.c = d.preco; u.h = Math.max(u.h, d.preco); u.l = Math.min(u.l, d.preco); }
+    Object.assign(h, { base, nome: d.nome, moeda: d.moeda, preco: d.preco });
   }
-  if (d.pts.length && d.preco != null) { const u = d.pts[d.pts.length - 1]; u.c = d.preco; u.h = Math.max(u.h, d.preco); u.l = Math.min(u.l, d.preco); }
-  Object.assign(historico[sym], { [f]: d.pts, nome: d.nome, moeda: d.moeda, preco: d.preco });
-  return historico[sym];
+  if (!h[f]) h[f] = agregar(h.base, f);
+  return h;
 }
 
 /* ===================== Navegação ===================== */
@@ -713,7 +734,8 @@ const grafico = {
     const linhasAl = alertas().filter(a => a.sym === atual && a.ativo && (a.tipo === 'abaixo' || a.tipo === 'acima'));
     linhasAl.forEach(a => { lo = Math.min(lo, a.valor); hi = Math.max(hi, a.valor); });
     const marg = (hi - lo) * 0.06 || hi * 0.01 || 1; lo -= marg; hi += marg;
-    const X = i => padL + (W - padL - padR) * i / (pts.length - 1);
+    // cada barra ocupa uma "fatia" igual: primeiro e último candle aparecem inteiros
+    const X = i => padL + (W - padL - padR) * (i + 0.5) / pts.length;
     const areaP = (baseP - padT) * 0.84;
     const Y = v => padT + areaP * (1 - (v - lo) / (hi - lo));
     this.X = X; this.padL = padL; this.padR = padR; this.W = W;
@@ -810,7 +832,9 @@ const grafico = {
       g.beginPath(); g.moveTo(X(i), padT); g.lineTo(X(i), H - padB); g.stroke(); g.setLineDash([]);
       g.fillStyle = C('txt'); g.beginPath(); g.arc(X(i), Y(p.c), 4, 0, 7); g.fill();
     }
-    $('info').innerHTML = `<b style="color:var(--txt)">${dataBR(p.t)}</b> A ${num(p.o)} M ${num(p.h)} m ${num(p.l)} F <b style="color:${p.c >= p.o ? 'var(--alta)' : 'var(--baixa)'}">${num(p.c)}</b><br>` +
+    const rotBarra = f === 'm' ? new Date((p.t - 3 * 3600) * 1000).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit', timeZone: 'UTC' })
+      : f === 'w' ? 'semana de ' + dataBR(p.t) : dataBR(p.t);
+    $('info').innerHTML = `<b style="color:var(--txt)">${rotBarra}</b> A ${num(p.o)} M ${num(p.h)} m ${num(p.l)} F <b style="color:${p.c >= p.o ? 'var(--alta)' : 'var(--baixa)'}">${num(p.c)}</b><br>` +
       series.map(s => s.val[i] != null ? `<span style="color:${corLinha(s.m.c)}">${nomeMM(s.m)} ${num(s.val[i])}</span>` : '').join(' ') +
       (R && R.val[i] != null ? ` <span style="color:#F23645">IFR ${num(R.val[i], 1)}</span>` : '');
   }
@@ -834,7 +858,7 @@ function ligarToque() {
     const r = el.getBoundingClientRect(), t = ev.touches ? ev.touches[0] : ev;
     const n = grafico.dados.pts.length;
     const fr = (t.clientX - r.left - grafico.padL) / (grafico.W - grafico.padL - grafico.padR);
-    grafico.toque = Math.max(0, Math.min(n - 1, Math.round(fr * (n - 1))));
+    grafico.toque = Math.max(0, Math.min(n - 1, Math.floor(fr * n)));
     grafico.desenhar();
   };
   el.addEventListener('touchstart', mover, { passive: true });
@@ -1888,7 +1912,7 @@ function simulacao() {
       setTimeout(() => {
         const sym = decodeURIComponent(url.split('/chart/')[1].split('?')[0]);
         if (sym.startsWith('XXXX')) return window.__cb(id, false, 'HTTP 404');
-        const sem = url.includes('1wk'), n = url.includes('5d') ? 5 : sem ? 700 : 2500;
+        const sem = url.includes('1wk'), n = url.includes('5d') ? 5 : url.includes('period1') ? 3500 : sem ? 700 : 2500;
         const full = serie(sym, 3500, 1), preco = full.c[full.c.length - 1];
         let ts = full.ts.slice(-n), c = full.c.slice(-n);
         const passo = url.includes('1mo') ? 30 : sem ? 7 : 0;

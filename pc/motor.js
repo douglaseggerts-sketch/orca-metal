@@ -6,22 +6,28 @@
 
 const URL_Y = 'https://query1.finance.yahoo.com/v8/finance/chart/';
 
-const URL_TF = { d: '?range=2y&interval=1d', w: '?range=10y&interval=1wk', m: '?range=max&interval=1mo' };
-function mesmoPeriodo(a, b, tf) {
-  if (!a || !b) return false;
-  if (tf === 'w') return Math.abs(b - a) < 6 * 86400;
-  const n = tf === 'm' ? 7 : 10;
-  return new Date(a * 1000).toISOString().slice(0, n) === new Date(b * 1000).toISOString().slice(0, n);
+// Sempre baixa barras diárias (period1/period2) e monta semana/mês aqui,
+// porque o Yahoo nem sempre respeita o intervalo semanal/mensal pedido.
+const diaDe = t => new Date((t - 3 * 3600) * 1000).toISOString().slice(0, 10);
+function chavePeriodo(t, tf) {
+  const dia = diaDe(t);
+  if (tf === 'm') return dia.slice(0, 7);
+  if (tf === 'w') { const d = new Date(dia + 'T12:00:00Z'); return new Date(d.getTime() - ((d.getUTCDay() + 6) % 7) * 864e5).toISOString().slice(0, 10); }
+  return dia;
 }
 async function baixar(baixarTexto, sym, tf) {
-  const j = JSON.parse(await baixarTexto(URL_Y + encodeURIComponent(sym) + URL_TF[tf]));
+  const agora = Math.floor(Date.now() / 1000), anos = tf === 'd' ? 2 : 12;
+  const j = JSON.parse(await baixarTexto(URL_Y + encodeURIComponent(sym) + `?period1=${agora - anos * 365 * 86400}&period2=${agora + 86400}&interval=1d`));
   const r = j.chart && j.chart.result && j.chart.result[0];
   if (!r) throw new Error('sem dados para ' + sym);
   const cc = (r.indicators.quote[0] || {}).close || [], ts = r.timestamp || [];
-  const c = [], t = [];
-  cc.forEach((x, i) => { if (x != null) { c.push(x); t.push(ts[i] || 0); } });
-  // o Yahoo às vezes repete a semana/mês atual em duas linhas: fica só a última
-  while (c.length >= 2 && mesmoPeriodo(t[t.length - 2], t[t.length - 1], tf)) { c.splice(c.length - 2, 1); t.splice(t.length - 2, 1); }
+  // fechamento de cada dia/semana/mês = último fechamento diário do período
+  const c = []; let chave = null;
+  cc.forEach((x, i) => {
+    if (x == null) return;
+    const k = chavePeriodo(ts[i] || 0, tf);
+    if (k === chave) c[c.length - 1] = x; else { c.push(x); chave = k; }
+  });
   let preco = r.meta.regularMarketPrice;
   if (preco == null) {
     if (!c.length) throw new Error('sem preço para ' + sym);
