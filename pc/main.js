@@ -59,7 +59,7 @@ async function sincronizar() {
     const r = await net.fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ chave, dados, aparelho: 'pc' }) });
     const txt = await r.text();
-    let j; try { j = JSON.parse(txt); } catch (e) { throw new Error('a planilha não respondeu (confira o endereço e se o script foi publicado para “Qualquer pessoa”)'); }
+    let j; try { j = JSON.parse(txt); } catch (e) { throw new Error(motivoPlanilha(txt, r.status)); }
     if (!j.ok) throw new Error(j.erro || 'a planilha recusou a sincronização');
     let recebidos = 0;
     for (const [k, o] of Object.entries(j.dados || {})) {
@@ -70,6 +70,15 @@ async function sincronizar() {
     return recebidos ? `Sincronizado (${recebidos} item(ns) recebido(s)).` : 'Sincronizado.';
   })();
   try { return await sincronizando; } finally { sincronizando = null; }
+}
+// explica o que o Google respondeu quando não vieram os dados
+function motivoPlanilha(txt, status) {
+  const t = String(txt || ''), titulo = (t.match(/<title>([^<]*)<\/title>/i) || [])[1] || '';
+  if (/accounts\.google\.com|ServiceLogin|Fazer login|Sign in/i.test(t)) return 'a planilha pediu login do Google: em Implantar › Gerenciar implantações, deixe “Quem pode acessar: Qualquer pessoa” e publique uma nova versão';
+  if (/authoriz|autoriza/i.test(t)) return 'o script ainda não foi autorizado: no Apps Script, execute a função “testar”, permita o acesso e publique uma nova versão';
+  if (/script function not found|doPost/i.test(t)) return 'o script colado está incompleto: cole o arquivo MonitorAcoes.gs inteiro e publique uma nova versão';
+  if (status === 404 || /not found|não encontrad/i.test(titulo)) return 'endereço não encontrado: copie o URL do app da Web (termina em /exec) em Gerenciar implantações';
+  return 'a planilha respondeu algo inesperado' + (titulo ? ' (“' + titulo.trim().slice(0, 60) + '”)' : status ? ' (HTTP ' + status + ')' : '') + ': confira o endereço /exec e o acesso “Qualquer pessoa”';
 }
 async function tentarSync() { if (syncConfigurado()) { try { await sincronizar(); } catch (e) { } } }
 

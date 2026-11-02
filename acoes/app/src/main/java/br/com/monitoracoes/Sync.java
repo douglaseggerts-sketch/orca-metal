@@ -41,7 +41,13 @@ final class Sync {
         JSONObject corpo = new JSONObject().put("chave", chave).put("dados", dados)
                 .put("aparelho", "celular");
 
-        JSONObject r = new JSONObject(Http.post(url, corpo.toString()));
+        String resposta = Http.post(url, corpo.toString());
+        JSONObject r;
+        try {
+            r = new JSONObject(resposta);
+        } catch (Exception e) {
+            throw new Exception(motivo(resposta));
+        }
         if (!r.optBoolean("ok")) {
             throw new Exception(r.optString("erro", "a planilha recusou a sincronização"));
         }
@@ -70,6 +76,22 @@ final class Sync {
         }
         Store.put(c, "ultimaSync", String.valueOf(System.currentTimeMillis()));
         return recebidos == 0 ? "Sincronizado." : "Sincronizado (" + recebidos + " item(ns) recebido(s)).";
+    }
+
+    /** Explica o que o Google respondeu quando não vieram os dados. */
+    static String motivo(String t) {
+        if (t == null) t = "";
+        if (t.contains("accounts.google.com") || t.contains("ServiceLogin") || t.contains("Fazer login") || t.contains("Sign in")) {
+            return "a planilha pediu login do Google: em Implantar › Gerenciar implantações, deixe \"Quem pode acessar: Qualquer pessoa\" e publique uma nova versão";
+        }
+        String l = t.toLowerCase();
+        if (l.contains("authoriz") || l.contains("autoriza")) {
+            return "o script ainda não foi autorizado: no Apps Script, execute a função \"testar\", permita o acesso e publique uma nova versão";
+        }
+        if (l.contains("script function not found")) {
+            return "o script colado está incompleto: cole o arquivo MonitorAcoes.gs inteiro e publique uma nova versão";
+        }
+        return "a planilha respondeu algo inesperado: confira o endereço (termina em /exec) e o acesso \"Qualquer pessoa\"";
     }
 
     /** Versão que nunca falha (para uso em segundo plano). */
