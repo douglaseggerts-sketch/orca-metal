@@ -169,6 +169,31 @@
   .tit-p { font-size: 13px; margin: 0; text-transform: uppercase; letter-spacing: .6px; color: #14B8A6; }
   .icone.peq { width: 30px; height: 30px; font-size: 15px; border-radius: 8px; }
   @media (min-width: 900px) { .painel-grid { grid-template-columns: repeat(3, 1fr); } .painel-grid .pc-rent { grid-column: span 2; } body.v-painel main { max-width: 1280px; } }
+  .tab-wrap { overflow-x: auto; margin: 8px -4px 0; }
+  .tab-cart { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tab-cart th { font-size: 10.5px; font-weight: 600; color: var(--sub); text-transform: uppercase; letter-spacing: .4px; text-align: right; padding: 5px 6px; border-bottom: 1px solid var(--linha); }
+  .tab-cart td { text-align: right; padding: 6px; border-bottom: 1px solid var(--linha); }
+  .tab-cart th:first-child, .tab-cart td:first-child { text-align: left; }
+  .tab-cart td.tk { font-weight: 700; }
+  .tab-cart tbody tr { cursor: pointer; } .tab-cart tbody tr:hover { background: var(--card2); }
+  .tab-cart tfoot td { font-weight: 700; border-bottom: 0; }
+  .tab-cart .alvo-ok { color: var(--alta); font-weight: 700; }
+  :root { --provRec: #0A1F66; --provFut: #8FB0FF; --provAtual: #2563EB; }
+  :root:not([data-tema="claro"]) { --provRec: #3D6BFF; --provFut: #5470B8; --provAtual: #8FB0FF; }
+  .prov-graf { display: flex; align-items: flex-end; gap: 6px; height: 190px; margin: 10px 0 2px; overflow-x: auto; padding-top: 4px; }
+  .pcol { flex: 1 0 34px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 34px; }
+  @media (max-width: 699px) { .pcol { flex: 0 0 38px; } .pval { font-size: 9.5px; } }
+  .pval { font-size: 10px; color: var(--sub); white-space: nowrap; margin-bottom: 3px; }
+  .pbar { width: 78%; max-width: 64px; display: flex; flex-direction: column; border-radius: 3px 3px 0 0; overflow: hidden; max-height: calc(100% - 46px); }
+  .prec { background: var(--provRec); } .prec.patual { background: var(--provAtual); } .pfut { background: var(--provFut); }
+  .prot { font-size: 10px; color: var(--sub); text-align: center; line-height: 1.2; margin-top: 4px; border-top: 1px solid var(--linha); width: 100%; padding-top: 3px; }
+  .dist-grid { display: block; }
+  @media (min-width: 1000px) { .dist-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 32px; align-items: center; } }
+  /* PC: todas as telas usam a largura toda da janela */
+  @media (min-width: 1000px) {
+    main, header, body.v-painel main { max-width: none; margin: 0; }
+    main { padding: 12px 24px; } header { padding-left: 24px; padding-right: 24px; }
+  }
   input[type=color] { padding: 2px; height: 42px; width: 52px; flex: none; }
 </style>
 </head>
@@ -1174,25 +1199,20 @@ function telaCarteira() {
     <input type="file" id="arqB3" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" style="display:none" onchange="lerArquivoB3(this)"></div>`;
 
 
-  // distribuição × meta
-  h += `<div class="card"><h2>Distribuição × meta</h2>`;
-  const maxPct = Math.max(1, ...cart.cats.map(c => Math.max(+c.meta || 0, total ? porCat[c.id] / total * 100 : 0)));
-  h += cart.cats.map(c => {
-    const at = total ? porCat[c.id] / total * 100 : 0, alvo = total * (+c.meta || 0) / 100, dif = alvo - porCat[c.id];
-    return `<div style="margin:10px 0 14px">
-      <div class="linha"><span class="bola" style="background:${c.cor}"></span><b style="flex:1">${esc(c.nome)}</b><span>${dinheiro(porCat[c.id])}</span></div>
-      <div style="position:relative;height:12px;background:var(--card2);border-radius:6px;margin:6px 0 4px">
-        <div style="position:absolute;left:0;top:0;bottom:0;width:${at / maxPct * 100}%;background:${c.cor};border-radius:6px"></div>
-        <div title="meta" style="position:absolute;top:-3px;bottom:-3px;width:2px;left:calc(${(+c.meta || 0) / maxPct * 100}% - 1px);background:#fff"></div></div>
-      <div class="linha sub" style="font-size:12px"><span style="flex:1">${num(at)}% de ${num(+c.meta || 0, 1)}% · meta ${dinheiro(alvo)}</span>
-        ${total ? `<span class="${dif >= 0 ? 'alta' : 'baixa'}" style="font-weight:650">${dif >= 0 ? 'Aportar ' : 'Reduzir '}${dinheiro(Math.abs(dif))}</span>` : ''}</div></div>`;
-  }).join('');
-  h += `<div class="sub">A barra branca é a meta. “Aportar/Reduzir” é quanto falta para cada lista ficar na meta.</div></div>`;
+  // distribuição × meta: barras verticais (atual colorida, meta cinza) + tabela compacta
+  h += `<div class="card"><div class="linha"><h2 style="flex:1;margin:0">Distribuição × meta</h2>
+      <span class="sub" style="font-size:11px"><span class="bola" style="display:inline-block;width:8px;height:8px;background:var(--ouro)"></span> atual &nbsp;<span class="bola" style="display:inline-block;width:8px;height:8px;background:var(--cruz)"></span> meta</span></div>
+    <div class="dist-grid"><div class="grafico" style="height:150px;margin:8px 0 4px"><canvas id="cvDist"></canvas></div>
+    <div style="display:grid;grid-template-columns:1.2fr 1fr 1.1fr 1.3fr;gap:3px 8px;font-size:12px;font-variant-numeric:tabular-nums;align-content:center">
+      <span class="sub">Lista</span><span class="sub" style="text-align:right">Atual</span><span class="sub" style="text-align:right">Meta</span><span class="sub" style="text-align:right">Ajuste</span>
+      ${cart.cats.map(c => {
+        const at = total ? porCat[c.id] / total * 100 : 0, alvo = total * (+c.meta || 0) / 100, dif = alvo - porCat[c.id];
+        return `<span><span class="bola" style="display:inline-block;width:7px;height:7px;background:${c.cor};margin-right:5px"></span>${esc(c.nome)}</span>
+          <span style="text-align:right">${num(at, 1)}%</span><span style="text-align:right" class="sub">${num(+c.meta || 0, 1)}%</span>
+          <span style="text-align:right" class="${!total || Math.abs(dif) < 0.005 ? 'sub' : dif > 0 ? 'alta' : 'baixa'}">${!total ? '—' : (dif >= 0 ? '+' : '−') + dinheiro(Math.abs(dif))}</span>`;
+      }).join('')}</div></div>
+    <div class="sub" style="font-size:11px;margin-top:6px">Ajuste: <span class="alta">+ aportar</span> / <span class="baixa">− reduzir</span> para cada lista ficar na meta.</div></div>`;
 
-  // simulação de aporte
-  h += `<div class="card"><h2>Vou aportar</h2><div class="linha">
-      <input id="aporte" type="number" inputmode="decimal" placeholder="Valor do aporte (R$)" value="${esc(aporteSim)}" oninput="aporteSim=this.value;simularAporte()"></div>
-      <div id="simAporte" style="margin-top:8px"></div></div>`;
 
   // ativos por lista
   cart.cats.forEach(c => {
@@ -1205,7 +1225,7 @@ function telaCarteira() {
       <b>${dinheiro(porCat[c.id])}</b><span class="sub" style="margin-left:6px">${aberta ? '▾' : '▸'}</span></div>
       ${invL > 0 ? `<div class="sub" style="font-size:12px;margin-top:2px">Investido ${dinheiro(invL)} · <span class="${valL >= invL ? 'alta' : 'baixa'}">${pct((valL / invL - 1) * 100)} (${dinheiro(valL - invL)})</span></div>` : ''}`;
     if (aberta) {
-      h += itens.length ? itens.slice().sort((a, b) => valorItem(b) - valorItem(a)).map(it => linhaItem(it, porCat[c.id])).join('') : `<div class="sub" style="margin-top:8px">Nenhum ativo nesta lista.</div>`;
+      h += itens.length ? tabelaLista(itens.slice().sort((a, b) => valorItem(b) - valorItem(a)), porCat[c.id]) : `<div class="sub" style="margin-top:8px">Nenhum ativo nesta lista.</div>`;
       if (acomp) h += `<div class="sub" style="font-size:12px;margin-top:6px">+ ${acomp} só acompanhando (quantidade 0) — veja na aba Cotações.</div>`;
       h += `<button class="btn sec peq" style="margin-top:10px" onclick="formItem(null,'${c.id}')">+ Adicionar em ${esc(c.nome)}</button>`;
     }
@@ -1236,19 +1256,8 @@ function telaCarteira() {
       <div style="margin-top:8px;font-size:13px;font-variant-numeric:tabular-nums">${arc.map(p => `<div class="linha" style="padding:3px 0"><span style="flex:1">${dataISOparaBR(p.pag)} · <b>${esc(p.tk)}</b> <span class="sub">${esc(p.tipo.toLowerCase())}${p.q ? ' · ' + num(p.q, 0) + ' un' : ''}</span></span><b>${dinheiro(p.v)}</b></div>`).join('')}</div></div>`;
   }
 
-  // proventos recebidos (extratos de Movimentação importados)
-  const pr = cart.proventos || [];
-  if (pr.length) {
-    const meses = []; const dm = new Date(); dm.setDate(1);
-    for (let k = 11; k >= 0; k--) { const d = new Date(dm.getFullYear(), dm.getMonth() - k, 1); meses.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')); }
-    const somaM = m => pr.filter(p => p.pag.slice(0, 7) === m).reduce((s, p) => s + p.v, 0);
-    const vals = meses.map(somaM), mx = Math.max(...vals, 0.01), tot12 = vals.reduce((a, b) => a + b, 0);
-    h += `<div class="card"><div class="linha"><h2 style="flex:1;margin:0">Proventos recebidos</h2><b>${dinheiro(tot12)}</b></div>
-      <div class="sub" style="font-size:12px">Últimos 12 meses · do extrato de Movimentação da B3</div>
-      <div style="display:flex;align-items:flex-end;gap:4px;height:90px;margin:10px 0 2px">${vals.map((v, k) => `<div title="${nomeMes(meses[k])}: ${dinheiro(v)}" style="flex:1;height:${Math.max(v > 0 ? 3 : 1, v / mx * 86)}px;background:${v > 0 ? '#14B8A6' : 'var(--linha)'};border-radius:3px 3px 0 0"></div>`).join('')}</div>
-      <div style="display:flex;gap:4px">${meses.map((m, k) => `<span class="sub" style="flex:1;text-align:center;font-size:9.5px">${k % 2 === 1 || k === 11 ? m.slice(5, 7) + '/' + m.slice(2, 4) : ''}</span>`).join('')}</div>
-      <div style="margin-top:8px;font-size:13px;font-variant-numeric:tabular-nums">${pr.slice(-6).reverse().map(p => `<div class="linha" style="padding:3px 0"><span style="flex:1">${dataISOparaBR(p.pag)} · <b>${esc(p.tk)}</b> <span class="sub">${esc(p.tipo)}</span></span><b>${dinheiro(p.v)}</b></div>`).join('')}</div></div>`;
-  }
+  // proventos: recebidos (Movimentação) + a receber (Eventos), por mês ou por ano — como no gráfico da B3
+  h += cardProventosCarteira();
 
   // evolução mensal
   h += `<div class="card"><h2>Evolução mensal</h2>`;
@@ -1267,6 +1276,8 @@ function telaCarteira() {
   }
   h += `</div>`;
   $('tela').innerHTML = h;
+  document.querySelectorAll('.prov-graf').forEach(g => g.scrollLeft = g.scrollWidth);   // mostra os meses mais recentes
+  desenharDistribuicao(porCat, total);
   simularAporte();
   desenharHist();
 }
@@ -1290,6 +1301,90 @@ function registrarAporte(v) {
 function apagarAporte(id) {
   if (!confirm('Apagar este aporte?')) return;
   cart.aportes = aportes().filter(a => a.id !== id); salvarCart(); telaCarteira();
+}
+function desenharDistribuicao(porCat, total) {
+  const cv = $('cvDist'); if (!cv) return;
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  const cats = cart.cats, n = cats.length; if (!n) return;
+  const vals = cats.map(c => ({ at: porCat[c.id] || 0, meta: total * (+c.meta || 0) / 100 }));
+  const max = Math.max(1, ...vals.map(v => Math.max(v.at, v.meta))) * 1.1;
+  const padB = 16, padT = 4, h = H - padB - padT, slot = W / n, bw = Math.min(26, slot * 0.28);
+  g.strokeStyle = C('linha'); g.beginPath(); g.moveTo(0, H - padB + .5); g.lineTo(W, H - padB + .5); g.stroke();
+  g.font = '10.5px system-ui, sans-serif'; g.textAlign = 'center';
+  cats.forEach((c, i) => {
+    const cx = slot * (i + 0.5), v = vals[i];
+    const ha = v.at / max * h, hm = v.meta / max * h;
+    g.fillStyle = c.cor; g.fillRect(cx - bw - 1, H - padB - ha, bw, ha);
+    g.fillStyle = C('cruz'); g.globalAlpha = .55; g.fillRect(cx + 1, H - padB - hm, bw, hm); g.globalAlpha = 1;
+    g.fillStyle = C('eixo'); g.fillText(c.nome.length > 9 ? c.nome.slice(0, 8) + '…' : c.nome, cx, H - 3);
+  });
+  g.textAlign = 'left';
+}
+// ativos da lista em tabela, como na planilha: preço, alvo, %, lucro, total, qtd, PM, compra
+let provVisao = ler('provVisao', 'mes');
+function cardProventosCarteira() {
+  const pr = cart.proventos || [], hoje = hojeISO();
+  const ar = (cart.aReceber || []).filter(p => p.pag > hoje);
+  if (!pr.length && !ar.length) return `<div class="card"><h2>Proventos</h2><div class="sub">Importe em “Importar da B3” o extrato de <b>Movimentação</b> (recebidos) e o de <b>Eventos</b> (a receber) para ver o gráfico por mês.</div></div>`;
+  const MES = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+  let cols = [];
+  if (provVisao === 'ano') {
+    const anos = [...new Set(pr.map(p => p.pag.slice(0, 4)).concat(ar.map(p => p.pag.slice(0, 4))))].sort();
+    cols = anos.map(y => ({ rot: y, sub: '', rec: pr.filter(p => p.pag.startsWith(y)).reduce((s, p) => s + p.v, 0), fut: ar.filter(p => p.pag.startsWith(y)).reduce((s, p) => s + p.v, 0), atual: y === hoje.slice(0, 4) }));
+  } else {
+    const ultFut = ar.length ? ar[ar.length - 1].pag.slice(0, 7) : hoje.slice(0, 7);
+    const d0 = new Date(); d0.setDate(1); d0.setMonth(d0.getMonth() - 12);
+    for (let d = new Date(d0); ; d.setMonth(d.getMonth() + 1)) {
+      const m = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      if (m > ultFut && m > hoje.slice(0, 7)) break;
+      if (cols.length > 24) break;
+      cols.push({ rot: MES[d.getMonth()], sub: String(d.getFullYear()).slice(2), rec: pr.filter(p => p.pag.startsWith(m)).reduce((s, p) => s + p.v, 0),
+        fut: ar.filter(p => p.pag.startsWith(m)).reduce((s, p) => s + p.v, 0), atual: m === hoje.slice(0, 7) });
+    }
+  }
+  const max = Math.max(0.01, ...cols.map(c => c.rec + c.fut));
+  const estreito = window.innerWidth < 700;
+  const curto = v => estreito ? (v >= 1000 ? num(v / 1000, 1) + 'k' : num(v, v >= 100 ? 0 : 2)) : v >= 1000 ? 'R$ ' + num(v / 1000, 1) + ' mil' : dinheiro(v);
+  const tot12 = pr.filter(p => p.pag > new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10)).reduce((s, p) => s + p.v, 0);
+  const totAr = ar.reduce((s, p) => s + p.v, 0);
+  return `<div class="card"><div class="linha" style="flex-wrap:wrap"><h2 style="flex:1;margin:0">Proventos</h2>
+      <div class="modo">${[['mes', 'Mês'], ['ano', 'Ano']].map(([k, n]) => `<button class="${provVisao === k ? 'on' : ''}" onclick="provVisao='${k}';gravar('provVisao','${k}');telaCarteira()">${n}</button>`).join('')}</div></div>
+    <div class="linha" style="gap:18px;margin:6px 0 2px;font-size:12px"><span class="sub">Recebidos 12 meses: <b style="color:var(--txt)">${dinheiro(tot12)}</b></span>${totAr ? `<span class="sub">A receber: <b style="color:var(--txt)">${dinheiro(totAr)}</b></span>` : ''}</div>
+    <div class="prov-graf">${cols.map(c => {
+      const v = c.rec + c.fut, alt = v / max * 100;
+      return `<div class="pcol" title="${c.rot} ${c.sub}: recebido ${dinheiro(c.rec)}${c.fut ? ' · a receber ' + dinheiro(c.fut) : ''}">
+        <span class="pval">${v > 0 ? curto(v) : ''}</span>
+        <div class="pbar" style="height:${v > 0 ? Math.max(2, alt) : 0}%">${c.fut ? `<div class="pfut" style="height:${c.fut / v * 100}%"></div>` : ''}${c.rec ? `<div class="prec ${c.atual ? 'patual' : ''}" style="height:${c.rec / v * 100}%"></div>` : ''}</div>
+        <span class="prot">${c.rot}${c.sub ? '<br>' + c.sub : ''}</span></div>`;
+    }).join('')}</div>
+    <div class="sub" style="font-size:11px;margin-top:4px"><span class="bola" style="display:inline-block;width:8px;height:8px;background:var(--provRec)"></span> recebido (extrato de Movimentação) &nbsp; <span class="bola" style="display:inline-block;width:8px;height:8px;background:var(--provFut)"></span> a receber (extrato de Eventos)</div>
+    ${pr.length ? `<div style="margin-top:8px;font-size:13px;font-variant-numeric:tabular-nums">${pr.slice(-5).reverse().map(p => `<div class="linha" style="padding:3px 0"><span style="flex:1">${dataISOparaBR(p.pag)} · <b>${esc(p.tk)}</b> <span class="sub">${esc(p.tipo)}</span></span><b>${dinheiro(p.v)}</b></div>`).join('')}</div>` : ''}</div>`;
+}
+function tabelaLista(itens, totCat) {
+  let totV = 0, totC = 0, totVc = 0;
+  const linhas = itens.map(it => {
+    const v = valorItem(it), p = precoItem(it), inv = it.sym && it.pm > 0 ? it.pm * (+it.qtd || 0) : null;
+    const luc = inv && p != null ? (p / it.pm - 1) * 100 : null;
+    totV += v; if (inv) { totC += inv; totVc += v; }
+    const q = it.sym ? cotacoes[it.sym] : null;
+    const compra = it.sym && it.alvo > 0 && p != null && p <= it.alvo;
+    return `<tr onclick="formItem('${it.id}')">
+      <td class="tk">${esc(it.sym ? rot(it.sym) : it.nome)}${q && q.var != null ? `<div class="${q.var >= 0 ? 'alta' : 'baixa'}" style="font-size:10.5px;font-weight:400">${pct(q.var)} hoje</div>` : ''}</td>
+      <td>${p != null ? num(p) : '—'}</td>
+      <td class="${compra ? 'alvo-ok' : 'sub'}">${it.alvo > 0 ? num(it.alvo) : '—'}</td>
+      <td>${totCat ? num(v / totCat * 100) + '%' : '—'}</td>
+      <td class="${luc == null ? 'sub' : luc >= 0 ? 'alta' : 'baixa'}">${luc == null ? '—' : pct(luc)}</td>
+      <td><b>${dinheiro(v)}</b></td>
+      <td>${it.sym ? num(+it.qtd || 0, (+it.qtd || 0) % 1 ? 2 : 0) : '—'}</td>
+      <td>${it.pm > 0 ? dinheiro(it.pm) : '—'}</td>
+      <td class="sub">${inv ? dinheiro(inv) : '—'}</td></tr>`;
+  }).join('');
+  const lucT = totC ? (totVc / totC - 1) * 100 : null;
+  return `<div class="tab-wrap"><table class="tab-cart"><thead><tr><th>Ativo</th><th>Preço</th><th>Alvo</th><th>%</th><th>Lucro</th><th>Total</th><th>Qtd</th><th>PM</th><th>Compra</th></tr></thead>
+    <tbody>${linhas}</tbody>
+    <tfoot><tr><td>TOTAL</td><td></td><td></td><td></td><td class="${lucT == null ? 'sub' : lucT >= 0 ? 'alta' : 'baixa'}">${lucT == null ? '' : pct(lucT)}</td><td>${dinheiro(totV)}</td><td></td><td></td><td>${totC ? dinheiro(totC) : ''}</td></tr></tfoot></table></div>`;
 }
 function linhaItem(it, totCat) {
   const v = valorItem(it), p = precoItem(it);
