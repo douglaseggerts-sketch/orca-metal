@@ -1196,7 +1196,8 @@ function telaCarteira() {
 
   // ativos por lista
   cart.cats.forEach(c => {
-    const itens = cart.itens.filter(i => i.cat === c.id);
+    // na carteira, só o que você tem (quantidade 0 = só acompanhando, fica na aba Cotações)
+    const doCat = cart.itens.filter(i => i.cat === c.id), itens = doCat.filter(i => !i.sym || +i.qtd > 0), acomp = doCat.length - itens.length;
     const aberta = cartAberta[c.id] !== false;
     const comPM = itens.filter(i => i.sym && i.pm > 0), invL = comPM.reduce((s, i) => s + i.pm * i.qtd, 0), valL = comPM.reduce((s, i) => s + valorItem(i), 0);
     h += `<div class="card"><div class="linha" onclick="cartAberta['${c.id}']=${!aberta};gravar('cartAberta',cartAberta);telaCarteira()" style="cursor:pointer">
@@ -1204,7 +1205,8 @@ function telaCarteira() {
       <b>${dinheiro(porCat[c.id])}</b><span class="sub" style="margin-left:6px">${aberta ? '▾' : '▸'}</span></div>
       ${invL > 0 ? `<div class="sub" style="font-size:12px;margin-top:2px">Investido ${dinheiro(invL)} · <span class="${valL >= invL ? 'alta' : 'baixa'}">${pct((valL / invL - 1) * 100)} (${dinheiro(valL - invL)})</span></div>` : ''}`;
     if (aberta) {
-      h += itens.length ? itens.map(it => linhaItem(it, porCat[c.id])).join('') : `<div class="sub" style="margin-top:8px">Nenhum ativo nesta lista.</div>`;
+      h += itens.length ? itens.slice().sort((a, b) => valorItem(b) - valorItem(a)).map(it => linhaItem(it, porCat[c.id])).join('') : `<div class="sub" style="margin-top:8px">Nenhum ativo nesta lista.</div>`;
+      if (acomp) h += `<div class="sub" style="font-size:12px;margin-top:6px">+ ${acomp} só acompanhando (quantidade 0) — veja na aba Cotações.</div>`;
       h += `<button class="btn sec peq" style="margin-top:10px" onclick="formItem(null,'${c.id}')">+ Adicionar em ${esc(c.nome)}</button>`;
     }
     h += `</div>`;
