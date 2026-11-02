@@ -74,7 +74,7 @@ async function sincronizar() {
 async function tentarSync() { if (syncConfigurado()) { try { await sincronizar(); } catch (e) { } } }
 
 /* ---------- internet (só Yahoo Finance) ---------- */
-const HOSTS = /^https:\/\/(query[12]\.finance\.yahoo\.com|www\.fundamentus\.com\.br|api\.usebolsai\.com)\//;
+const HOSTS = /^https:\/\/(query[12]\.finance\.yahoo\.com|www\.fundamentus\.com\.br|api\.usebolsai\.com|api\.bcb\.gov\.br)\//;
 async function baixarTexto(url, cabecalhos) {
   if (!HOSTS.test(url)) throw new Error('endereço não permitido');
   const r = await net.fetch(url, {

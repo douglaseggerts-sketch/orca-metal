@@ -143,6 +143,11 @@
   body.dividida .grafico { height: 500px; } body.dividida .grafico.comIFR { height: 640px; }
   body.dividida .cot.sel { background: var(--card2); }
   body.dividida .cot.sel .tk2:not(.pos) { text-decoration: underline; text-underline-offset: 4px; }
+  .painel { display: grid; gap: 12px; grid-template-columns: 1fr; }
+  .painel .card { margin: 0; min-width: 0; }
+  .tit-p { font-size: 13px; margin: 0; text-transform: uppercase; letter-spacing: .6px; color: #14B8A6; }
+  .icone.peq { width: 30px; height: 30px; font-size: 15px; border-radius: 8px; }
+  @media (min-width: 900px) { .painel { grid-template-columns: repeat(3, 1fr); } .painel .pc-rent { grid-column: span 2; } body.v-painel main { max-width: 1280px; } }
   input[type=color] { padding: 2px; height: 42px; width: 52px; flex: none; }
 </style>
 </head>
@@ -155,6 +160,7 @@
 <div id="split"><aside id="telaEsq"></aside><main id="tela"></main></div>
 <nav>
   <button data-v="lista" onclick="ir('lista')"><b>📈</b>Cotações</button>
+  <button data-v="painel" onclick="ir('painel')"><b>📊</b>Painel</button>
   <button data-v="carteira" onclick="ir('carteira')"><b>💼</b>Carteira</button>
   <button data-v="alertas" onclick="ir('alertas')"><b>🔔</b>Alertas</button>
   <button data-v="medias" onclick="ir('medias')"><b>〰️</b>Indicadores</button>
@@ -421,6 +427,7 @@ function ir(v, sym) {
   const div = dividida();
   try { eraDividida = div; } catch (e) { }
   document.body.classList.toggle('dividida', div);
+  document.body.classList.toggle('v-painel', v === 'painel');
   if (div) { if (!atual || !todosSimbolos().includes(atual)) atual = todosSimbolos()[0] || null; view = atual ? 'detalhe' : 'lista'; }
   else $('telaEsq').innerHTML = '';
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === (v === 'detalhe' ? 'lista' : v)));
@@ -443,11 +450,13 @@ function render() {
   else if (view === 'alertas') telaAlertas();
   else if (view === 'medias') telaMedias();
   else if (view === 'carteira') { telaCarteira(); atualizarCotacoesCarteira(); }
+  else if (view === 'painel') telaPainel();
 }
 function atualizar() {
   if (view === 'detalhe') { delete historico[atual]; telaDetalhe(); if (dividida()) atualizarLista(); }
   else if (view === 'alertas') verificarAgora();
   else if (view === 'carteira') { toast('Atualizando cotações…'); atualizarCotacoesCarteira(); }
+  else if (view === 'painel') { Object.keys(ultimoAnoMem).forEach(k => delete ultimoAnoMem[k]); telaPainel(); }
   else atualizarLista();
 }
 
@@ -1730,11 +1739,11 @@ async function buscarProventos(sym) {
       if (!tab) continue;
       const cab = [...tab.querySelectorAll('th')].map(th => semAcento(th.textContent));
       const iD = cab.findIndex(h => h.includes('data') && !h.includes('pagamento')), iV = cab.findIndex(h => h.includes('valor')),
-        iT = cab.findIndex(h => h.includes('tipo')), iQ = cab.findIndex(h => h.includes('quantas'));
+        iT = cab.findIndex(h => h.includes('tipo')), iQ = cab.findIndex(h => h.includes('quantas')), iP = cab.findIndex(h => h.includes('pagamento'));
       tab.querySelectorAll('tbody tr').forEach(tr => {
         const td = [...tr.querySelectorAll('td')].map(x => x.textContent.trim());
         const d = dataBRparaISO(td[iD]), v = numF(td[iV]), q = iQ >= 0 ? numF(td[iQ]) || 1 : 1;
-        if (d && v > 0) lista.push({ d, v: v / q, tipo: iT >= 0 ? td[iT] : '' });
+        if (d && v > 0) lista.push({ d, v: v / q, tipo: iT >= 0 ? td[iT] : '', pag: iP >= 0 ? dataBRparaISO(td[iP]) : null });
       });
       if (lista.length) break;
     } catch (e) { }
@@ -1743,7 +1752,7 @@ async function buscarProventos(sym) {
   if (!lista.length && chaveBolsai()) {
     try {
       const j = await bolsai(`dividends/${T}?years=20`);
-      lista = (j.payments || []).filter(p => p.ex_date && p.value_per_share > 0).map(p => ({ d: p.ex_date, v: +p.value_per_share, tipo: p.type || '', ajustado: !!p.adjusted }));
+      lista = (j.payments || []).filter(p => p.ex_date && p.value_per_share > 0).map(p => ({ d: p.ex_date, v: +p.value_per_share, tipo: p.type || '', ajustado: !!p.adjusted, pag: p.payment_date || null }));
     } catch (e) { }
   }
   // o Fundamentus não ajusta desdobramentos/bonificações: ajusta pelo Yahoo
@@ -1911,6 +1920,232 @@ function desenharHistInd() {
   g.textAlign = 'left';
 }
 
+/* ===================== Painel (dashboard) ===================== */
+let painelPeriodo = ler('painelPeriodo', '1A'), painelAltaFiltro = ler('painelAltaFiltro', 'todos');
+const PAINEL_DIAS = { '6M': 182, '1A': 365, '2A': 730 };
+const ultimoAnoMem = {};
+// fechamentos diários dos últimos ~2 anos (mais leve que o histórico completo)
+async function buscarRecente(sym) {
+  if (ultimoAnoMem[sym] && Date.now() - ultimoAnoMem[sym].t < 30 * 60e3) return ultimoAnoMem[sym].d;
+  const agora = Math.floor(Date.now() / 1000);
+  const d = interpretar(await chamar('fetch', URL_Y + encodeURIComponent(sym) + `?period1=${agora - 800 * 86400}&period2=${agora + 86400}&interval=1d`));
+  const pts = [];
+  d.pts.forEach(p => { const dia = diaDe(p.t); if (pts.length && pts[pts.length - 1].dia === dia) pts[pts.length - 1].c = p.c; else pts.push({ dia, c: p.c }); });
+  if (pts.length && d.preco != null) pts[pts.length - 1].c = d.preco;
+  ultimoAnoMem[sym] = { t: Date.now(), d: { pts, moeda: d.moeda } };
+  return ultimoAnoMem[sym].d;
+}
+let cdiMem = null;
+async function buscarCDI(desde) {   // taxa diária do CDI (% ao dia), série 12 do Banco Central
+  if (cdiMem && cdiMem.desde <= desde && Date.now() - cdiMem.t < 6 * 3600e3) return cdiMem.l;
+  const br = iso => iso.split('-').reverse().join('/');
+  const j = JSON.parse(await chamar('fetch', `https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados?formato=json&dataInicial=${br(desde)}&dataFinal=${br(hojeISO())}`));
+  const l = j.map(x => ({ dia: dataBRparaISO(x.data), v: parseFloat(String(x.valor).replace(',', '.')) })).filter(x => x.dia && !isNaN(x.v));
+  cdiMem = { t: Date.now(), desde, l };
+  return l;
+}
+// valor no dia = último fechamento até aquele dia
+function serieNoDia(pts) {
+  let i = 0, ult = null;
+  return dia => { while (i < pts.length && pts[i].dia <= dia) { ult = pts[i].c; i++; } return ult; };
+}
+async function rentabilidade() {
+  const dias = PAINEL_DIAS[painelPeriodo] || 365;
+  const ini = new Date(Date.now() - dias * 864e5).toISOString().slice(0, 10);
+  const itens = cart.itens.filter(i => i.sym && i.qtd > 0);
+  const [ibov, cdi, dolar, series] = await Promise.all([
+    buscarRecente('^BVSP'), buscarCDI(ini).catch(() => null),
+    itens.some(i => !ehB3(i.sym)) ? buscarRecente('BRL=X').catch(() => null) : null,
+    Promise.all(itens.map(i => buscarRecente(i.sym).then(d => ({ i, d })).catch(() => null)))
+  ]);
+  const datas = ibov.pts.map(p => p.dia).filter(d => d >= ini);
+  if (!datas.length) return null;
+  // Ibovespa
+  const ib = serieNoDia(ibov.pts), ib0 = ib(datas[0]);
+  const ibovL = datas.map(d => ({ dia: d, v: (ib(d) / ib0 - 1) * 100 }));
+  // CDI acumulado
+  let cdiL = null;
+  if (cdi) {
+    const porDia = {}; cdi.forEach(x => porDia[x.dia] = x.v);
+    let acc = 1; cdiL = datas.map((d, k) => { if (k > 0 && porDia[d] != null) acc *= 1 + porDia[d] / 100; return { dia: d, v: (acc - 1) * 100 }; });
+  }
+  // carteira (quantidades atuais; ativos em dólar convertidos pelo câmbio do dia)
+  const usd = dolar ? serieNoDia(dolar.pts) : null;
+  const fs = series.filter(Boolean).map(x => ({ q: +x.i.qtd, f: serieNoDia(x.d.pts), usd: x.d.moeda === 'USD' }));
+  let carL = null;
+  if (fs.length) {
+    const vals = datas.map(d => fs.reduce((s, x) => { const p = x.f(d); if (p == null) return s; return s + x.q * p * (x.usd && usd ? (usd(d) || 0) : 1); }, 0));
+    const k0 = vals.findIndex(v => v > 0);
+    if (k0 >= 0) carL = datas.map((d, k) => ({ dia: d, v: k < k0 ? null : (vals[k] / vals[k0] - 1) * 100 }));
+  }
+  return { datas, carL, ibovL, cdiL };
+}
+// proventos recebidos (pela data de pagamento × quantidade atual)
+async function proventosMes() {
+  const itens = cart.itens.filter(i => i.sym && i.qtd > 0 && ehB3(i.sym));
+  const hoje = hojeISO(), mA = hoje.slice(0, 7);
+  const dAnt = new Date(); dAnt.setDate(1); dAnt.setMonth(dAnt.getMonth() - 1);
+  const mP = dAnt.toISOString().slice(0, 7);
+  let atual = 0, anterior = 0, provisionado = 0;
+  const det = [];
+  for (const it of itens) {
+    let l; try { l = await buscarProventos(it.sym); } catch (e) { continue; }
+    l.forEach(p => {
+      const pag = p.pag || p.d, v = p.v * it.qtd;
+      if (pag.slice(0, 7) === mA && pag <= hoje) { atual += v; det.push({ sym: it.sym, pag, v, futuro: false }); }
+      else if (pag.slice(0, 7) === mP) anterior += v;
+      if (pag > hoje && p.d <= hoje) { provisionado += v; det.push({ sym: it.sym, pag, v, futuro: true }); }
+    });
+  }
+  return { atual, anterior, provisionado, det: det.sort((a, b) => a.pag < b.pag ? -1 : 1) };
+}
+
+function telaPainel(soDesenhar) {
+  $('titulo').textContent = 'Painel';
+  const { porCat, total } = resumoCarteira();
+  const temAtivos = cart.itens.some(i => i.sym && i.qtd > 0);
+  $('tela').innerHTML = `<div class="painel">
+    <div class="card pc-rent"><div class="linha"><h2 class="tit-p" style="flex:1">Rentabilidade</h2>
+        <div class="modo">${Object.keys(PAINEL_DIAS).map(k => `<button class="${k === painelPeriodo ? 'on' : ''}" onclick="painelPeriodo='${k}';gravar('painelPeriodo','${k}');telaPainel()">${k}</button>`).join('')}</div></div>
+      <div class="linha" style="gap:22px;margin:6px 0 2px" id="rentNums"></div>
+      <div class="legenda" id="rentLeg"></div>
+      <div class="grafico" style="height:240px"><canvas id="cvRent"></canvas></div>
+      <div class="sub" style="font-size:11px">Carteira atual (quantidades de hoje), só variação de preço, sem proventos.</div></div>
+    <div class="card"><div class="linha"><h2 class="tit-p" style="flex:1">Composição</h2><button class="icone peq" onclick="ir('carteira')">→</button></div>
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap"><div style="width:170px;height:170px;flex:none"><canvas id="cvComp" style="width:100%;height:100%"></canvas></div>
+      <div style="flex:1;min-width:140px">${cart.cats.filter(c => porCat[c.id] > 0).map(c => `<div class="linha" style="padding:3px 0;font-size:13px"><span class="bola" style="background:${c.cor}"></span><span style="flex:1">${esc(c.nome)}</span><b>${num(total ? porCat[c.id] / total * 100 : 0, 1)}%</b></div>`).join('') || '<div class="sub">Carteira vazia.</div>'}</div></div></div>
+    <div class="card"><div class="linha"><h2 class="tit-p" style="flex:1">Patrimônio</h2><button class="icone peq" onclick="ir('carteira')">→</button></div>
+      <div class="sub">Atual total</div><div class="grande" style="font-size:24px;font-weight:700">${dinheiro(total)}</div>
+      <div class="grafico" style="height:170px;margin-top:6px"><canvas id="cvPat"></canvas></div></div>
+    <div class="card"><div class="linha"><h2 class="tit-p" style="flex:1">Proventos</h2><button class="icone peq" onclick="ir('carteira')">→</button></div>
+      <div class="sub" style="text-align:center">Mês atual × anterior</div>
+      <div id="provPainel" class="sub" style="text-align:center;padding:30px 0">${temAtivos ? 'Calculando…' : 'Cadastre suas quantidades na Carteira.'}</div></div>
+    <div class="card"><div class="linha"><h2 class="tit-p" style="flex:1">Alta / Baixa</h2>
+        <select style="width:auto;padding:5px 8px;font-size:13px" onchange="painelAltaFiltro=this.value;gravar('painelAltaFiltro',this.value);desenharAltaBaixa()">
+          ${[['todos', 'Todos'], ['acao', 'Ações'], ['fii', 'FIIs'], ['bdr', 'BDRs']].map(([k, n]) => `<option value="${k}" ${k === painelAltaFiltro ? 'selected' : ''}>${n}</option>`).join('')}</select>
+        <button class="icone peq" onclick="ir('lista')">→</button></div>
+      <div id="altaBaixa" style="margin-top:6px"></div></div>
+  </div>`;
+  desenharComposicao(porCat, total);
+  desenharPatrimonio(total);
+  desenharAltaBaixa();
+  if (soDesenhar) { if (rentDados) desenharRent(rentDados); if (provDados) desenharProvPainel(provDados); }
+  else carregarPainel();
+}
+let provDados = null;
+async function carregarPainel() {
+  // cotações das ações da carteira (para patrimônio e altas/baixas)
+  rentDados = null; provDados = null;
+  await Promise.all(cart.itens.filter(i => i.sym).map(i => buscarCotacao(i.sym).catch(() => { })));
+  if (view !== 'painel') return;
+  cart.itens.forEach(i => { if (i.sym && cotacoes[i.sym] && cotacoes[i.sym].preco != null) i.ult = cotacoes[i.sym].preco; });
+  telaPainel(true);   // redesenha composição e patrimônio com as cotações de agora
+  rentabilidade().then(r => { if (view === 'painel') desenharRent(r); }).catch(e => { if ($('rentNums')) $('rentNums').innerHTML = `<span class="sub">Não consegui calcular (${esc(e.message).slice(0, 60)}).</span>`; });
+  proventosMes().then(p => { provDados = p; if (view === 'painel') desenharProvPainel(p); }).catch(() => { });
+}
+function tipoAtivo(sym) {
+  const t = rot(sym);
+  if (!ehB3(sym)) return 'eua';
+  if (/3[1-5]$/.test(t)) return 'bdr';
+  if (/11$/.test(t)) { const it = itemDe(sym), c = it && catDe(it.cat); return c && /FII/i.test(c.nome) ? 'fii' : (fundDe(sym) || {}).tipo === 'fii' ? 'fii' : 'acao'; }
+  return 'acao';
+}
+function desenharAltaBaixa() {
+  const el = $('altaBaixa'); if (!el) return;
+  const l = cart.itens.filter(i => i.sym && i.qtd > 0 && cotacoes[i.sym] && cotacoes[i.sym].var != null)
+    .filter(i => painelAltaFiltro === 'todos' || tipoAtivo(i.sym) === painelAltaFiltro)
+    .map(i => ({ s: i.sym, v: cotacoes[i.sym].var }));
+  const altas = l.filter(x => x.v >= 0).sort((a, b) => b.v - a.v).slice(0, 5), baixas = l.filter(x => x.v < 0).sort((a, b) => a.v - b.v).slice(0, 5);
+  const col = (arr, alta) => arr.length ? arr.map(x => `<div class="linha" style="padding:6px 0;border-bottom:1px solid var(--linha);cursor:pointer" onclick="ir('detalhe','${esc(x.s)}')">
+      <b style="flex:1;font-size:14px">${esc(rot(x.s))}</b><span class="${alta ? 'alta' : 'baixa'}" style="font-weight:650">${alta ? '↑' : '↓'} ${num(Math.abs(x.v))}%</span></div>`).join('')
+    : `<div class="sub" style="padding:6px 0">Nenhuma ${alta ? 'alta' : 'baixa'}.</div>`;
+  el.innerHTML = l.length ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px"><div>${col(altas, true)}</div><div>${col(baixas, false)}</div></div>`
+    : `<div class="sub">Sem cotações das suas posições${painelAltaFiltro !== 'todos' ? ' nesse filtro' : ''}.</div>`;
+}
+function prepCanvas(id) {
+  const cv = $(id); if (!cv) return null;
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  g.font = '11px system-ui, sans-serif';
+  return { g, W, H };
+}
+function desenharComposicao(porCat, total) {
+  const c = prepCanvas('cvComp'); if (!c) return;
+  const { g, W, H } = c, r = Math.min(W, H) / 2 - 4, cx = W / 2, cy = H / 2;
+  if (!total) { g.strokeStyle = C('linha'); g.lineWidth = 22; g.beginPath(); g.arc(cx, cy, r - 11, 0, 7); g.stroke(); return; }
+  let a = -Math.PI / 2;
+  cart.cats.forEach(cat => {
+    const f = (porCat[cat.id] || 0) / total; if (!f) return;
+    g.strokeStyle = cat.cor; g.lineWidth = 26; g.beginPath(); g.arc(cx, cy, r - 13, a, a + f * Math.PI * 2); g.stroke(); a += f * Math.PI * 2;
+  });
+}
+function desenharPatrimonio(total) {
+  const c = prepCanvas('cvPat'); if (!c) return;
+  const { g, W, H } = c;
+  const pts = cart.hist.filter(x => x.m !== mesAtual()).map(x => ({ rot: nomeMes(x.m), v: x.t }));
+  if (total > 0) pts.push({ rot: nomeMes(mesAtual()), v: total });
+  if (pts.length < 2) { g.fillStyle = C('sub'); g.fillText('A evolução aparece a partir do 2º mês registrado.', 4, H / 2); return; }
+  const padL = 46, padR = 8, padT = 8, padB = 18, n = pts.length;
+  let lo = 0, hi = Math.max(...pts.map(p => p.v)) * 1.08;
+  const X = i => padL + (W - padL - padR) * i / (n - 1), Y = v => padT + (H - padT - padB) * (1 - (v - lo) / (hi - lo));
+  g.textBaseline = 'middle';
+  for (let k = 0; k <= 3; k++) { const v = hi * k / 3; g.strokeStyle = C('grade'); g.beginPath(); g.moveTo(padL, Y(v)); g.lineTo(W - padR, Y(v)); g.stroke(); g.fillStyle = C('eixo'); g.fillText(v >= 1000 ? num(v / 1000, v >= 10000 ? 0 : 1) + 'K' : num(v, 0), 2, Y(v)); }
+  const grad = g.createLinearGradient(0, padT, 0, H - padB); grad.addColorStop(0, 'rgba(47,123,255,.35)'); grad.addColorStop(1, 'rgba(47,123,255,0)');
+  g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(X(i), Y(p.v)) : g.moveTo(X(i), Y(p.v))); g.lineTo(X(n - 1), Y(0)); g.lineTo(X(0), Y(0)); g.closePath(); g.fillStyle = grad; g.fill();
+  g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(X(i), Y(p.v)) : g.moveTo(X(i), Y(p.v))); g.strokeStyle = C('ouro'); g.lineWidth = 2; g.stroke();
+  pts.forEach((p, i) => { g.fillStyle = C('card'); g.beginPath(); g.arc(X(i), Y(p.v), 3, 0, 7); g.fill(); g.strokeStyle = C('ouro'); g.stroke(); });
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = C('eixo');
+  const passo = Math.max(1, Math.ceil(n / 5)); pts.forEach((p, i) => { if (i % passo === 0 || i === n - 1) { g.textAlign = i === n - 1 ? 'right' : 'center'; g.fillText(p.rot, i === n - 1 ? W - padR : X(i), H - 3); } }); g.textAlign = 'left';
+}
+let rentDados = null;
+function desenharRent(r) {
+  rentDados = r;
+  const cores = { car: '#F5B942', ibov: '#E53935', cdi: corLinha('#90A4AE') };
+  const ult = l => { if (!l) return null; for (let k = l.length - 1; k >= 0; k--) if (l[k].v != null) return l[k].v; return null; };
+  const nums = $('rentNums');
+  if (nums) nums.innerHTML = [['Carteira', ult(r && r.carL), cores.car], ['Ibovespa', ult(r && r.ibovL), cores.ibov], ['CDI', ult(r && r.cdiL), cores.cdi]]
+    .map(([n, v, cor]) => `<div><div class="sub" style="font-size:11px"><span class="bola" style="display:inline-block;background:${cor};width:8px;height:8px;margin-right:4px"></span>${n}</div><b style="font-size:19px" class="${v == null ? '' : v >= 0 ? 'alta' : 'baixa'}">${v == null ? '—' : pct(v)}</b></div>`).join('');
+  const c = prepCanvas('cvRent'); if (!c || !r) return;
+  const { g, W, H } = c, series = [[r.cdiL, cores.cdi, 1.5], [r.ibovL, cores.ibov, 1.5], [r.carL, cores.car, 2.2]].filter(s => s[0]);
+  const vals = series.flatMap(s => s[0].map(x => x.v).filter(v => v != null));
+  let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals); const m = (hi - lo) * 0.08 || 1; lo -= m; hi += m;
+  const n = r.datas.length, padL = 40, padR = 8, padT = 8, padB = 18;
+  const X = i => padL + (W - padL - padR) * i / Math.max(1, n - 1), Y = v => padT + (H - padT - padB) * (1 - (v - lo) / (hi - lo));
+  const passo = niceStep((hi - lo) / 5); g.textBaseline = 'middle';
+  for (let y = Math.ceil(lo / passo) * passo; y <= hi; y += passo) { g.strokeStyle = Math.abs(y) < 1e-9 ? C('cruz') : C('grade'); g.beginPath(); g.moveTo(padL, Y(y)); g.lineTo(W - padR, Y(y)); g.stroke(); g.fillStyle = C('eixo'); g.fillText(num(y, 0) + '%', 2, Y(y)); }
+  // área da carteira
+  if (r.carL) {
+    const grad = g.createLinearGradient(0, padT, 0, H - padB); grad.addColorStop(0, 'rgba(245,185,66,.35)'); grad.addColorStop(1, 'rgba(245,185,66,0)');
+    g.beginPath(); let ini = -1; r.carL.forEach((p, i) => { if (p.v == null) return; if (ini < 0) { ini = i; g.moveTo(X(i), Y(0)); } g.lineTo(X(i), Y(p.v)); });
+    g.lineTo(X(n - 1), Y(0)); g.closePath(); g.fillStyle = grad; g.fill();
+  }
+  series.forEach(([l, cor, lw]) => { g.beginPath(); let on = false; l.forEach((p, i) => { if (p.v == null) return; on ? g.lineTo(X(i), Y(p.v)) : g.moveTo(X(i), Y(p.v)); on = true; }); g.strokeStyle = cor; g.lineWidth = lw; g.stroke(); });
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = C('eixo');
+  for (let k = 0; k < 5; k++) { const i = Math.round((n - 1) * k / 4); const d = r.datas[i]; g.textAlign = k === 0 ? 'left' : k === 4 ? 'right' : 'center'; g.fillText(d.slice(5, 7) + '/' + d.slice(2, 4), X(i), H - 3); }
+  g.textAlign = 'left';
+}
+function desenharProvPainel(p) {
+  const el = $('provPainel'); if (!el) return;
+  el.style.padding = '0';
+  el.innerHTML = `<div style="position:relative;width:200px;height:200px;margin:8px auto 4px"><canvas id="cvProv" style="width:100%;height:100%"></canvas>
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+        <b style="color:var(--txt);font-size:12px">MÊS ATUAL</b><span style="color:var(--txt);font-size:20px">${dinheiro(p.atual)}</span></div></div>
+    <div style="display:flex;justify-content:space-between;text-align:left;margin-top:6px">
+      <div><b style="color:var(--txt);font-size:12px">PROVISIONADO</b><div style="color:var(--txt);font-size:16px">${dinheiro(p.provisionado)}</div></div>
+      <div style="text-align:right"><b style="color:var(--txt);font-size:12px">MÊS ANTERIOR</b><div style="font-size:15px">${dinheiro(p.anterior)}</div></div></div>
+    ${p.det.length ? `<div style="margin-top:10px;text-align:left;font-size:12.5px">${p.det.slice(0, 6).map(x => `<div class="linha" style="padding:2px 0"><span style="flex:1">${esc(rot(x.sym))} · ${dataISOparaBR(x.pag)}${x.futuro ? ' <span class="tag">a receber</span>' : ''}</span><b style="color:var(--txt)">${dinheiro(x.v)}</b></div>`).join('')}</div>` : ''}`;
+  const c = prepCanvas('cvProv'); if (!c) return;
+  const { g, W, H } = c, cx = W / 2, cy = H / 2, max = Math.max(p.atual, p.anterior, 0.01);
+  const anel = (r, f, cor) => {
+    g.lineCap = 'round'; g.lineWidth = 12;
+    g.strokeStyle = C('card2'); g.beginPath(); g.arc(cx, cy, r, 0, 7); g.stroke();
+    if (f > 0) { g.strokeStyle = cor; g.beginPath(); g.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, f)); g.stroke(); }
+  };
+  anel(88, p.anterior / max, '#1B4F8A');
+  anel(70, p.atual / max, '#14B8A6');
+}
+
 /* ===================== Simulação (só para testar fora do celular) ===================== */
 function simFund(url) {
   const T = (url.match(/papel=([A-Z0-9]+)/) || [])[1] || '';
@@ -1940,6 +2175,7 @@ function simulacao() {
   return {
     fetch(url, id) {
       if (/fundamentus|usebolsai/.test(url)) return setTimeout(() => window.__cb(id, true, simFund(url)), 150);
+      if (/api\.bcb\.gov\.br/.test(url)) return setTimeout(() => { const l = []; for (let k = 800; k >= 0; k--) { const d = new Date(Date.now() - k * 864e5); if (d.getDay() % 6) l.push({ data: d.toLocaleDateString('pt-BR'), valor: '0.0548' }); } window.__cb(id, true, JSON.stringify(l)); }, 150);
       setTimeout(() => {
         const sym = decodeURIComponent(url.split('/chart/')[1].split('?')[0]);
         if (sym.startsWith('XXXX')) return window.__cb(id, false, 'HTTP 404');
