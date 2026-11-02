@@ -157,11 +157,11 @@
   body.dividida .grafico { height: 500px; } body.dividida .grafico.comIFR { height: 640px; }
   body.dividida .cot.sel { background: var(--card2); }
   body.dividida .cot.sel .tk2:not(.pos) { text-decoration: underline; text-underline-offset: 4px; }
-  .painel { display: grid; gap: 12px; grid-template-columns: 1fr; }
-  .painel .card { margin: 0; min-width: 0; }
+  .painel-grid { display: grid; gap: 12px; grid-template-columns: 1fr; }
+  .painel-grid .card { margin: 0; min-width: 0; }
   .tit-p { font-size: 13px; margin: 0; text-transform: uppercase; letter-spacing: .6px; color: #14B8A6; }
   .icone.peq { width: 30px; height: 30px; font-size: 15px; border-radius: 8px; }
-  @media (min-width: 900px) { .painel { grid-template-columns: repeat(3, 1fr); } .painel .pc-rent { grid-column: span 2; } body.v-painel main { max-width: 1280px; } }
+  @media (min-width: 900px) { .painel-grid { grid-template-columns: repeat(3, 1fr); } .painel-grid .pc-rent { grid-column: span 2; } body.v-painel main { max-width: 1280px; } }
   input[type=color] { padding: 2px; height: 42px; width: 52px; flex: none; }
 </style>
 </head>
@@ -2018,7 +2018,7 @@ function telaPainel(soDesenhar) {
   $('titulo').textContent = 'Painel';
   const { porCat, total } = resumoCarteira();
   const temAtivos = cart.itens.some(i => i.sym && i.qtd > 0);
-  $('tela').innerHTML = `<div class="painel">
+  $('tela').innerHTML = `<div class="painel-grid">
     <div class="card pc-rent"><div class="linha"><h2 class="tit-p" style="flex:1">Rentabilidade</h2>
         <div class="modo">${Object.keys(PAINEL_DIAS).map(k => `<button class="${k === painelPeriodo ? 'on' : ''}" onclick="painelPeriodo='${k}';gravar('painelPeriodo','${k}');telaPainel()">${k}</button>`).join('')}</div></div>
       <div class="linha" style="gap:22px;margin:6px 0 2px" id="rentNums"></div>
