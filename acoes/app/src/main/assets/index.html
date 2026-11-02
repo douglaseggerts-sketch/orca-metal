@@ -137,7 +137,11 @@
   #telaEsq { display: none; }
   body.dividida { padding-bottom: 0; }
   body.dividida header { max-width: none; }
-  body.dividida #split { display: grid; grid-template-columns: minmax(290px, 23%) 1fr; height: calc(100vh - 63px - 66px); }
+  /* cabeçalho baixo no PC dividido: mais espaço para o gráfico */
+  body.dividida header { padding: 5px 16px 5px; }
+  body.dividida header h1 { font-size: 15px; }
+  body.dividida header .icone { width: 30px; height: 30px; font-size: 15px; border-radius: 8px; }
+  body.dividida #split { display: grid; grid-template-columns: minmax(290px, 23%) 1fr; height: calc(100vh - 41px - 66px); }
   body.dividida #telaEsq { display: block; overflow-y: auto; border-right: 1px solid var(--linha); padding: 8px 10px 16px; }
   /* lista compacta no PC */
   body.dividida .abas { margin: 0 -10px 6px; padding: 0 10px; gap: 2px; }
@@ -153,7 +157,10 @@
   body.dividida .cot .tk2 { font-size: 13.5px; padding: 1px 6px; margin-left: -6px; }
   body.dividida .cot .nm { font-size: 10.5px; margin-top: 0; }
   body.dividida #telaEsq > .sub { font-size: 10.5px !important; }
-  body.dividida main { max-width: none; margin: 0; overflow-y: auto; padding: 14px 28px 24px; }
+  body.dividida main { max-width: none; margin: 0; overflow-y: auto; padding: 4px 24px 24px; }
+  body.dividida main .topo .grande { font-size: 24px; }
+  body.dividida main .periodos { margin: 6px 0 4px; }
+  body.dividida main .periodos button { padding: 4px 0; font-size: 12px; }
   body.dividida .grafico { height: 500px; } body.dividida .grafico.comIFR { height: 640px; }
   body.dividida .cot.sel { background: var(--card2); }
   body.dividida .cot.sel .tk2:not(.pos) { text-decoration: underline; text-underline-offset: 4px; }
@@ -1430,7 +1437,7 @@ function importarB3() {
     1. Entre em <b>investidor.b3.com.br</b> (Área do Investidor).<br>
     2. Vá em <b>Extratos › Posição</b>, escolha a data e toque em <b>Baixar › Excel</b>.<br>
     3. Volte aqui e escolha o arquivo baixado.<br><br>
-    Opcional: em <b>Extratos › Negociação</b> baixe o Excel das compras e vendas — o app calcula o <b>preço médio</b> de cada ativo.<br><br>
+    Opcional: em <b>Extratos › Negociação</b> ou <b>Extratos › Movimentação</b> baixe o Excel das compras e vendas — o app calcula o <b>preço médio</b> de cada ativo (escolha o período desde a sua primeira compra).<br><br>
     Ações vão para a lista DY, FIIs para FII, BDRs para BDR e Tesouro/Renda Fixa para CAIXA. Depois você pode mudar a lista de cada ativo.</div>
     <div class="linha" style="margin-top:14px"><button class="btn" style="flex:1" onclick="$('arqB3').click()">Escolher arquivo</button>
       <button class="btn sec" onclick="fecharFolha()">Cancelar</button></div>`);
@@ -1555,8 +1562,41 @@ function catPorTipo(tp) {
 const limparTicker = t => String(t).toUpperCase().replace(/\s/g, '').replace(/F$/, '');
 
 function aplicarImportacao(planilhas) {
-  const pos = {}, neg = {}, manuais = [];
+  const pos = {}, neg = {}, manuais = [], mov = {};
+  let provRecebidos = 0, movIgnoradas = 0, temMov = false;
   for (const [aba, linhas] of Object.entries(planilhas)) {
+    // Extrato de Movimentação: compras/vendas (Transferência - Liquidação), desdobramentos e proventos
+    let cm = acharCabecalho(linhas, ['entrada/saida', 'movimentacao', 'produto', 'quantidade']);
+    if (cm) {
+      temMov = true;
+      const cES = cm.col('entrada/saida'), cD = cm.col('data'), cM = cm.col('movimentacao'), cP = cm.col('produto'),
+        cQ = cm.col('quantidade'), cPr = cm.col('preco'), cV = cm.col('valor da operacao');
+      const ops = [];
+      for (let i = cm.i + 1; i < linhas.length; i++) {
+        const l = linhas[i], prod = String(l[cP] || ''), tipo = semAcento(l[cM] || ''), credito = semAcento(l[cES] || '').startsWith('c');
+        const tk = limparTicker(prod.split(' - ')[0]);
+        const q = numBR(l[cQ]), pr = numBR(l[cPr]), val = numBR(l[cV]);
+        if (/rendimento|dividendo|juros sobre capital/.test(tipo)) { if (credito && val > 0) provRecebidos += val; continue; }
+        if (!/^[A-Z]{4}\d{1,2}$/.test(tk)) { movIgnoradas++; continue; }   // CDB, Tesouro etc.
+        const nome = semAcento(prod);
+        const abaTk = /fii|fdo inv imob|fundo de investimento imob|imobiliario/.test(nome) ? 'fundo' : /\bdrn\b|\bbdr\b|depositary/.test(nome) ? 'bdr' : /\betf\b|indice/.test(nome) ? 'etf' : 'acoes';
+        let op = null;
+        if (/liquidacao|compra|venda/.test(tipo)) op = credito ? 'compra' : 'venda';
+        else if (/desdobr|bonifica|atualizacao/.test(tipo) && credito) op = 'ganho';
+        else if (/grupamento/.test(tipo)) op = credito ? 'ganho' : 'perda';
+        if (!op || !(q > 0)) { movIgnoradas++; continue; }
+        ops.push({ d: dataNum(l[cD]), tk, q, pr: pr > 0 ? pr : 0, op, aba: abaTk, ordem: i });
+      }
+      // a planilha vem do mais novo para o mais antigo
+      ops.sort((a, b) => a.d - b.d || b.ordem - a.ordem).forEach(o => {
+        const x = mov[o.tk] = mov[o.tk] || { q: 0, custo: 0, aba: o.aba };
+        if (o.op === 'compra') { x.q += o.q; x.custo += o.q * o.pr; }
+        else if (o.op === 'ganho') x.q += o.q;
+        else if (o.op === 'perda') x.q = Math.max(0, x.q - o.q);
+        else { const pm = x.q ? x.custo / x.q : 0; x.q = Math.max(0, x.q - o.q); x.custo = pm * x.q; }
+      });
+      continue;
+    }
     // Extrato de Negociação: compras e vendas → quantidade e preço médio
     let c = acharCabecalho(linhas, ['data do negocio', 'codigo de negociacao', 'quantidade', 'preco']);
     if (c) {
@@ -1595,8 +1635,10 @@ function aplicarImportacao(planilhas) {
       }
     }
   }
-  const nPos = Object.keys(pos).length, nNeg = Object.keys(neg).length;
-  if (!nPos && !nNeg && !manuais.length) throw new Error('Não encontrei ativos neste arquivo.');
+  const nPos = Object.keys(pos).length, nNeg = Object.keys(neg).length, nMov = Object.keys(mov).length;
+  if (!nPos && !nNeg && !manuais.length && !nMov) throw new Error(temMov
+    ? 'O extrato de Movimentação não tem compras ou vendas de ações/FIIs nesse período. Para as quantidades, use o Excel de Extratos › Posição.'
+    : 'Não encontrei ativos neste arquivo.');
   const novos = [], atualizados = [];
   const acharItem = tk => cart.itens.find(i => i.sym && limparTicker(rot(i.sym)) === tk);
   const symDe = tk => /^[A-Z]{4}\d{1,2}$/.test(tk) ? tk + '.SA' : tk;
@@ -1612,6 +1654,16 @@ function aplicarImportacao(planilhas) {
     if (!it) { it = { id: novoId(), cat: catPorTipo(tipoPorTicker(tk, x.aba)), sym: symDe(tk), qtd: x.q, b3: true }; cart.itens.push(it); novos.push(tk); }
     it.pm = +(x.custo / x.q).toFixed(4); comPM++;
   }
+  // Movimentação: cria os ativos novos; nos que já existem só ajusta o preço médio se a quantidade bater
+  // (o extrato pode cobrir só parte do histórico)
+  const movPM = [], movDif = [];
+  for (const [tk, x] of Object.entries(mov)) {
+    if (!(x.q > 0)) continue;
+    const it = acharItem(tk), pm = x.custo > 0 ? +(x.custo / x.q).toFixed(4) : null;
+    if (!it) { cart.itens.push({ id: novoId(), cat: catPorTipo(tipoPorTicker(tk, x.aba)), sym: symDe(tk), qtd: x.q, pm, b3: true }); novos.push(tk); }
+    else if (Math.abs((+it.qtd || 0) - x.q) < 1e-6) { if (pm) { it.pm = pm; movPM.push(tk); } }
+    else movDif.push(tk);
+  }
   const caixa = manuais.length ? catPorNome(['CAIXA', 'RENDA FIXA'], 'CAIXA') : null;
   manuais.forEach(m => {
     const it = cart.itens.find(i => !i.sym && i.nome === m.nome);
@@ -1623,6 +1675,10 @@ function aplicarImportacao(planilhas) {
   if (atualizados.length) r += `<b>${atualizados.length}</b> quantidade(s) atualizada(s)<br>`;
   if (comPM) r += `Preço médio calculado para <b>${comPM}</b> ativo(s)<br>`;
   if (manuais.length) r += `<b>${manuais.length}</b> título(s) de Tesouro/Renda Fixa na lista CAIXA<br>`;
+  if (movPM.length) r += `Preço médio atualizado pela movimentação: ${movPM.join(', ')}<br>`;
+  if (provRecebidos > 0) r += `Proventos recebidos no período do extrato: <b>${dinheiro(provRecebidos)}</b><br>`;
+  if (movDif.length) r += `<br><span class="sub">${movDif.join(', ')}: a quantidade da carteira é diferente da soma do extrato (ele deve cobrir só parte do histórico). Não mexi nesses.</span><br>`;
+  if (temMov) r += `<br><span class="sub">O extrato de Movimentação cobre só o período escolhido na B3. Para conferir as quantidades totais, importe também o Excel de <b>Extratos › Posição</b>.${movIgnoradas ? ' Linhas de CDB, Tesouro e outros eventos foram ignoradas.' : ''}</span>`;
   if (fora.length) r += `<br><span class="sub">Não estão mais na posição da B3: ${fora.join(', ')}. Se vendeu, exclua da carteira.</span>`;
   return r || 'Nada mudou.';
 }
