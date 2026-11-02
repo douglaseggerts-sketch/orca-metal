@@ -133,6 +133,16 @@
   .ind .sub { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ind b { font-size: 15px; font-variant-numeric: tabular-nums; }
   .ind.clic { cursor: pointer; border-color: var(--cruz); }
+  /* PC com janela larga: cotações à esquerda, gráfico à direita */
+  #telaEsq { display: none; }
+  body.dividida { padding-bottom: 0; }
+  body.dividida header { max-width: none; }
+  body.dividida #split { display: grid; grid-template-columns: minmax(400px, 34%) 1fr; height: calc(100vh - 63px - 66px); }
+  body.dividida #telaEsq { display: block; overflow-y: auto; border-right: 1px solid var(--linha); padding: 12px 16px 20px; }
+  body.dividida main { max-width: none; margin: 0; overflow-y: auto; padding: 14px 28px 24px; }
+  body.dividida .grafico { height: 500px; } body.dividida .grafico.comIFR { height: 640px; }
+  body.dividida .cot.sel { background: var(--card2); }
+  body.dividida .cot.sel .tk2:not(.pos) { text-decoration: underline; text-underline-offset: 4px; }
   input[type=color] { padding: 2px; height: 42px; width: 52px; flex: none; }
 </style>
 </head>
@@ -142,7 +152,7 @@
   <h1 id="titulo">Ações</h1>
   <button class="icone" id="btAtualizar" onclick="atualizar()">↻</button>
 </header>
-<main id="tela"></main>
+<div id="split"><aside id="telaEsq"></aside><main id="tela"></main></div>
 <nav>
   <button data-v="lista" onclick="ir('lista')"><b>📈</b>Cotações</button>
   <button data-v="carteira" onclick="ir('carteira')"><b>💼</b>Carteira</button>
@@ -220,7 +230,7 @@ function recarregarEstado() {
 function aplicarRemoto() {
   recarregarEstado();
   const f = $('folha'); if (f && f.style.display === 'block') return;
-  if (view === 'detalhe') { listarAlertasAtivo(); desenharDetalhe(); }
+  if (view === 'detalhe') { listarAlertasAtivo(); desenharDetalhe(); if (dividida()) atualizarLista(); }
   else if (view === 'lista') atualizarLista();
   else if (view === 'carteira') telaCarteira();
   else render();
@@ -400,27 +410,42 @@ async function buscarHistorico(sym, f) {
 }
 
 /* ===================== Navegação ===================== */
+// janela larga (PC): lista e gráfico lado a lado
+const LARGURA_DIVIDIDA = 1000;
+const dividida = () => window.innerWidth >= LARGURA_DIVIDIDA && (view === 'lista' || view === 'detalhe');
+const listaVisivel = () => view === 'lista' || dividida();
+const alvoLista = () => dividida() ? $('telaEsq') : $('tela');
 function ir(v, sym) {
   view = v;
   if (v === 'detalhe') atual = sym;
+  const div = dividida();
+  try { eraDividida = div; } catch (e) { }
+  document.body.classList.toggle('dividida', div);
+  if (div) { if (!atual || !todosSimbolos().includes(atual)) atual = todosSimbolos()[0] || null; view = atual ? 'detalhe' : 'lista'; }
+  else $('telaEsq').innerHTML = '';
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === (v === 'detalhe' ? 'lista' : v)));
-  $('btVoltar').style.display = v === 'detalhe' ? '' : 'none';
+  $('btVoltar').style.display = view === 'detalhe' && !div ? '' : 'none';
   $('btAtualizar').style.display = v === 'medias' ? 'none' : '';
   fecharFolha();
   window.scrollTo(0, 0);
   render();
 }
-window.voltar = function () { if (fecharFolha()) return true; if (view === 'detalhe') { ir('lista'); return true; } if (view !== 'lista') { ir('lista'); return true; } return false; };
-window.aoVoltarAoApp = function () { sincronizarAgora(true); if (view === 'alertas') render(); else if (view === 'carteira') atualizarCotacoesCarteira(); else if (view === 'lista') atualizarLista(); };
+window.voltar = function () { if (fecharFolha()) return true; if (dividida()) return false; if (view === 'detalhe') { ir('lista'); return true; } if (view !== 'lista') { ir('lista'); return true; } return false; };
+window.aoVoltarAoApp = function () { sincronizarAgora(true); if (view === 'alertas') render(); else if (view === 'carteira') atualizarCotacoesCarteira(); else if (listaVisivel()) atualizarLista(); };
 function render() {
-  if (view === 'lista') telaLista();
+  if (dividida()) {
+    telaLista();
+    if (view === 'detalhe') telaDetalhe();
+    else $('tela').innerHTML = '<div class="vazio">Adicione uma ação na lista ao lado.</div>';
+  }
+  else if (view === 'lista') telaLista();
   else if (view === 'detalhe') telaDetalhe();
   else if (view === 'alertas') telaAlertas();
   else if (view === 'medias') telaMedias();
   else if (view === 'carteira') { telaCarteira(); atualizarCotacoesCarteira(); }
 }
 function atualizar() {
-  if (view === 'detalhe') { delete historico[atual]; telaDetalhe(); }
+  if (view === 'detalhe') { delete historico[atual]; telaDetalhe(); if (dividida()) atualizarLista(); }
   else if (view === 'alertas') verificarAgora();
   else if (view === 'carteira') { toast('Atualizando cotações…'); atualizarCotacoesCarteira(); }
   else atualizarLista();
@@ -449,7 +474,7 @@ function volFin(s) { const q = cotacoes[s]; return q && q.volume && q.preco ? q.
 const abrev = v => v == null ? '' : v >= 1e9 ? num(v / 1e9, 2) + ' bi' : v >= 1e6 ? num(v / 1e6, 1) + ' mi' : v >= 1e3 ? num(v / 1e3, 0) + ' mil' : num(v, 0);
 function horaCot(q) { return q && q.hora ? new Date(q.hora * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''; }
 function telaLista() {
-  $('titulo').textContent = 'Cotações';
+  if (!dividida()) $('titulo').textContent = 'Cotações';
   const syms = todosSimbolos(), grupos = gruposLista();
   if (listaSel !== 'todas' && !grupos.some(g => g.id === listaSel)) listaSel = 'todas';
   const abas = [{ id: 'todas', nome: 'TODAS' }].concat(grupos.filter(g => g.id !== '_sem' || syms.some(s => listaDe(s) === '_sem')));
@@ -485,7 +510,7 @@ function telaLista() {
   h += `<div class="cotacoes">${ss.map(s => linhaAcao(s)).join('')}</div>`;
   const ult = ler('ultimaVerificacao', null);
   if (ult) h += `<div class="sub" style="text-align:center;margin-top:10px;font-size:12px">Toque e segure numa ação para mover ou remover · Alertas conferidos em ${new Date(+ult).toLocaleString('pt-BR')}</div>`;
-  $('tela').innerHTML = h;
+  alvoLista().innerHTML = h;
   ligarSegurar();
 }
 function linhaAcao(s) {
@@ -494,7 +519,7 @@ function linhaAcao(s) {
   const posicao = it && it.qtd > 0, f = fundDe(s);
   const p = q.preco != null ? q.preco : it && it.ult;
   const compra = it && it.alvo > 0 && p != null && p <= it.alvo;
-  return `<div class="cot" data-sym="${esc(s)}" onclick="ir('detalhe','${esc(s)}')" style="border-left-color:${listaSel === 'todas' && g.cor ? g.cor : 'transparent'}">
+  return `<div class="cot ${dividida() && s === atual ? 'sel' : ''}" data-sym="${esc(s)}" onclick="ir('detalhe','${esc(s)}')" style="border-left-color:${listaSel === 'todas' && g.cor ? g.cor : 'transparent'}">
     <div class="c1"><span class="tk2 ${posicao ? 'pos' : ''}" style="${posicao ? 'background:' + cor + ';color:#fff' : 'color:' + cor}">${esc(rot(s))}</span>
       <span class="nm">${q.nome ? esc(q.nome) : q.erro ? 'sem dados' : '…'}</span></div>
     <div class="c2"><b>${p != null ? num(p) : '—'}</b><span class="nm">${horaCot(q)}</span></div>
@@ -531,9 +556,9 @@ function formAdicionar() {
 }
 function selLista(id) { listaSel = id; gravar('listaSel', id); telaLista(); }
 async function atualizarLista() {
-  if (view === 'lista') telaLista();
+  if (listaVisivel()) telaLista();
   await Promise.all(todosSimbolos().map(s => buscarCotacao(s).catch(() => { cotacoes[s] = Object.assign(cotacoes[s] || {}, { erro: true }); })));
-  if (view === 'lista') telaLista();
+  if (listaVisivel()) telaLista();
   if (['dy', 'pl', 'pvp'].includes(ordem.k)) carregarIndicadoresLista();
 }
 let carregandoInd = false;
@@ -543,7 +568,7 @@ async function carregarIndicadoresLista() {   // um por vez, para não sobrecarr
     for (const s of todosSimbolos().filter(ehB3)) {
       if (fundMem[s]) continue;
       try { await buscarFund(s); } catch (e) { }
-      if (view === 'lista') telaLista();
+      if (listaVisivel()) telaLista();
     }
   } finally { carregandoInd = false; }
 }
@@ -865,7 +890,13 @@ function ligarToque() {
   el.addEventListener('touchmove', mover, { passive: true });
   el.addEventListener('mousemove', mover);
 }
-window.addEventListener('resize', () => view === 'detalhe' && grafico.desenhar());
+let eraDividida = null;
+window.addEventListener('resize', () => {
+  const agora = window.innerWidth >= LARGURA_DIVIDIDA && (view === 'lista' || view === 'detalhe');
+  if (eraDividida !== null && agora !== eraDividida) { eraDividida = agora; ir(agora ? 'lista' : (view === 'detalhe' ? 'detalhe' : 'lista'), atual); return; }
+  eraDividida = agora;
+  if (view === 'detalhe') grafico.desenhar();
+});
 
 /* --- alertas do ativo --- */
 function ajustarForm() {
