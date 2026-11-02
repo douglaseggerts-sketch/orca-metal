@@ -1226,6 +1226,28 @@ function telaCarteira() {
       (ap.length > 6 ? `<button class="btn sec peq" style="margin-top:6px" onclick="cartAberta._aportes=!cartAberta._aportes;telaCarteira()">${cartAberta._aportes ? 'Mostrar menos' : 'Ver todos (' + ap.length + ')'}</button>` : '')
       : '<div class="sub">Nenhum aporte registrado.</div>'}</div>`;
 
+  // proventos a receber (extrato de Eventos)
+  const arc = (cart.aReceber || []).filter(p => p.pag >= hojeISO());
+  if (arc.length) {
+    h += `<div class="card"><div class="linha"><h2 style="flex:1;margin:0">A receber</h2><b>${dinheiro(arc.reduce((s, p) => s + p.v, 0))}</b></div>
+      <div class="sub" style="font-size:12px">Proventos anunciados, valor líquido · extrato de Eventos da B3${cart.aReceberEm ? ' de ' + new Date(cart.aReceberEm).toLocaleDateString('pt-BR') : ''}</div>
+      <div style="margin-top:8px;font-size:13px;font-variant-numeric:tabular-nums">${arc.map(p => `<div class="linha" style="padding:3px 0"><span style="flex:1">${dataISOparaBR(p.pag)} · <b>${esc(p.tk)}</b> <span class="sub">${esc(p.tipo.toLowerCase())}${p.q ? ' · ' + num(p.q, 0) + ' un' : ''}</span></span><b>${dinheiro(p.v)}</b></div>`).join('')}</div></div>`;
+  }
+
+  // proventos recebidos (extratos de Movimentação importados)
+  const pr = cart.proventos || [];
+  if (pr.length) {
+    const meses = []; const dm = new Date(); dm.setDate(1);
+    for (let k = 11; k >= 0; k--) { const d = new Date(dm.getFullYear(), dm.getMonth() - k, 1); meses.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')); }
+    const somaM = m => pr.filter(p => p.pag.slice(0, 7) === m).reduce((s, p) => s + p.v, 0);
+    const vals = meses.map(somaM), mx = Math.max(...vals, 0.01), tot12 = vals.reduce((a, b) => a + b, 0);
+    h += `<div class="card"><div class="linha"><h2 style="flex:1;margin:0">Proventos recebidos</h2><b>${dinheiro(tot12)}</b></div>
+      <div class="sub" style="font-size:12px">Últimos 12 meses · do extrato de Movimentação da B3</div>
+      <div style="display:flex;align-items:flex-end;gap:4px;height:90px;margin:10px 0 2px">${vals.map((v, k) => `<div title="${nomeMes(meses[k])}: ${dinheiro(v)}" style="flex:1;height:${Math.max(v > 0 ? 3 : 1, v / mx * 86)}px;background:${v > 0 ? '#14B8A6' : 'var(--linha)'};border-radius:3px 3px 0 0"></div>`).join('')}</div>
+      <div style="display:flex;gap:4px">${meses.map((m, k) => `<span class="sub" style="flex:1;text-align:center;font-size:9.5px">${k % 2 === 1 || k === 11 ? m.slice(5, 7) + '/' + m.slice(2, 4) : ''}</span>`).join('')}</div>
+      <div style="margin-top:8px;font-size:13px;font-variant-numeric:tabular-nums">${pr.slice(-6).reverse().map(p => `<div class="linha" style="padding:3px 0"><span style="flex:1">${dataISOparaBR(p.pag)} · <b>${esc(p.tk)}</b> <span class="sub">${esc(p.tipo)}</span></span><b>${dinheiro(p.v)}</b></div>`).join('')}</div></div>`;
+  }
+
   // evolução mensal
   h += `<div class="card"><h2>Evolução mensal</h2>`;
   if (!cart.hist.length) h += `<div class="sub">O total de cada mês é registrado sozinho sempre que você abre a carteira.</div>`;
@@ -1437,6 +1459,7 @@ function importarB3() {
     1. Entre em <b>investidor.b3.com.br</b> (Área do Investidor).<br>
     2. Vá em <b>Extratos › Posição</b>, escolha a data e toque em <b>Baixar › Excel</b>.<br>
     3. Volte aqui e escolha o arquivo baixado.<br><br>
+    Proventos: <b>Extratos › Eventos</b> traz os proventos a receber; <b>Extratos › Movimentação</b> traz os já recebidos.<br>
     Opcional: em <b>Extratos › Negociação</b> ou <b>Extratos › Movimentação</b> baixe o Excel das compras e vendas — o app calcula o <b>preço médio</b> de cada ativo (escolha o período desde a sua primeira compra).<br><br>
     Ações vão para a lista DY, FIIs para FII, BDRs para BDR e Tesouro/Renda Fixa para CAIXA. Depois você pode mudar a lista de cada ativo.</div>
     <div class="linha" style="margin-top:14px"><button class="btn" style="flex:1" onclick="$('arqB3').click()">Escolher arquivo</button>
@@ -1563,8 +1586,23 @@ const limparTicker = t => String(t).toUpperCase().replace(/\s/g, '').replace(/F$
 
 function aplicarImportacao(planilhas) {
   const pos = {}, neg = {}, manuais = [], mov = {};
-  let provRecebidos = 0, movIgnoradas = 0, temMov = false;
+  let provRecebidos = 0, movIgnoradas = 0, temMov = false, temEventos = false;
+  const aReceber = [];
+  const provsExtrato = [];
   for (const [aba, linhas] of Object.entries(planilhas)) {
+    // Extrato de Eventos: proventos a receber (valor líquido e previsão de pagamento)
+    const ce = acharCabecalho(linhas, ['produto', 'tipo de evento', 'previsao de pagamento', 'valor liquido']);
+    if (ce) {
+      temEventos = true;
+      const cP = ce.col('produto'), cT = ce.col('tipo de evento'), cD = ce.col('previsao de pagamento'), cQ = ce.col('quantidade'), cV = ce.col('valor liquido');
+      for (let i = ce.i + 1; i < linhas.length; i++) {
+        const l = linhas[i], tk = limparTicker(String(l[cP] || '').split(' - ')[0]), v = numBR(l[cV]);
+        const d = dataBRparaISO(l[cD]) || (/^\d+(\.\d+)?$/.test(String(l[cD])) ? new Date((+l[cD] - 25569) * 864e5).toISOString().slice(0, 10) : null);
+        if (!/^[A-Z]{4}\d{1,2}$/.test(tk) || !(v > 0) || !d) continue;
+        aReceber.push({ pag: d, tk, v: +v.toFixed(2), tipo: String(l[cT] || '').trim(), q: numBR(l[cQ]) || null });
+      }
+      continue;
+    }
     // Extrato de Movimentação: compras/vendas (Transferência - Liquidação), desdobramentos e proventos
     let cm = acharCabecalho(linhas, ['entrada/saida', 'movimentacao', 'produto', 'quantidade']);
     if (cm) {
@@ -1576,7 +1614,14 @@ function aplicarImportacao(planilhas) {
         const l = linhas[i], prod = String(l[cP] || ''), tipo = semAcento(l[cM] || ''), credito = semAcento(l[cES] || '').startsWith('c');
         const tk = limparTicker(prod.split(' - ')[0]);
         const q = numBR(l[cQ]), pr = numBR(l[cPr]), val = numBR(l[cV]);
-        if (/rendimento|dividendo|juros sobre capital/.test(tipo)) { if (credito && val > 0) provRecebidos += val; continue; }
+        if (/rendimento|dividendo|juros sobre capital/.test(tipo)) {
+          if (credito && val > 0) {
+            provRecebidos += val;
+            const dIso = dataBRparaISO(l[cD]) || (typeof l[cD] === 'string' ? null : new Date((dataNum(l[cD]) - 25569) * 864e5).toISOString().slice(0, 10));
+            if (dIso) provsExtrato.push({ pag: dIso, tk, v: +val.toFixed(2), tipo: String(l[cM] || '').trim(), q: q > 0 ? q : null });
+          }
+          continue;
+        }
         if (!/^[A-Z]{4}\d{1,2}$/.test(tk)) { movIgnoradas++; continue; }   // CDB, Tesouro etc.
         const nome = semAcento(prod);
         const abaTk = /fii|fdo inv imob|fundo de investimento imob|imobiliario/.test(nome) ? 'fundo' : /\bdrn\b|\bbdr\b|depositary/.test(nome) ? 'bdr' : /\betf\b|indice/.test(nome) ? 'etf' : 'acoes';
@@ -1636,7 +1681,16 @@ function aplicarImportacao(planilhas) {
     }
   }
   const nPos = Object.keys(pos).length, nNeg = Object.keys(neg).length, nMov = Object.keys(mov).length;
-  if (!nPos && !nNeg && !manuais.length && !nMov) throw new Error(temMov
+  // proventos recebidos: guarda na carteira sem duplicar
+  cart.proventos = cart.proventos || [];
+  const chaveProv = p => [p.pag, p.tk, semAcento(p.tipo), p.v].join('|');
+  const jaTem = new Set(cart.proventos.map(chaveProv));
+  let provNovos = 0;
+  provsExtrato.forEach(p => { if (!jaTem.has(chaveProv(p))) { cart.proventos.push(p); jaTem.add(chaveProv(p)); provNovos++; } });
+  cart.proventos.sort((a, b) => a.pag < b.pag ? -1 : 1);
+  // a receber: o extrato de Eventos é a foto atual, então substitui a lista anterior
+  if (temEventos) { cart.aReceber = aReceber.sort((a, b) => a.pag < b.pag ? -1 : 1); cart.aReceberEm = Date.now(); }
+  if (!nPos && !nNeg && !manuais.length && !nMov && !provsExtrato.length && !temEventos) throw new Error(temMov
     ? 'O extrato de Movimentação não tem compras ou vendas de ações/FIIs nesse período. Para as quantidades, use o Excel de Extratos › Posição.'
     : 'Não encontrei ativos neste arquivo.');
   const novos = [], atualizados = [];
@@ -1676,7 +1730,8 @@ function aplicarImportacao(planilhas) {
   if (comPM) r += `Preço médio calculado para <b>${comPM}</b> ativo(s)<br>`;
   if (manuais.length) r += `<b>${manuais.length}</b> título(s) de Tesouro/Renda Fixa na lista CAIXA<br>`;
   if (movPM.length) r += `Preço médio atualizado pela movimentação: ${movPM.join(', ')}<br>`;
-  if (provRecebidos > 0) r += `Proventos recebidos no período do extrato: <b>${dinheiro(provRecebidos)}</b><br>`;
+  if (temEventos) r += `<b>${aReceber.length}</b> provento(s) a receber, total <b>${dinheiro(aReceber.reduce((s, p) => s + p.v, 0))}</b> (Carteira › A receber e Painel)<br>`;
+  if (provRecebidos > 0) r += `Proventos recebidos no período do extrato: <b>${dinheiro(provRecebidos)}</b>${provNovos ? ` (${provNovos} pagamento(s) guardado(s) em Carteira › Proventos recebidos)` : ' (já estavam guardados)'}<br>`;
   if (movDif.length) r += `<br><span class="sub">${movDif.join(', ')}: a quantidade da carteira é diferente da soma do extrato (ele deve cobrir só parte do histórico). Não mexi nesses.</span><br>`;
   if (temMov) r += `<br><span class="sub">O extrato de Movimentação cobre só o período escolhido na B3. Para conferir as quantidades totais, importe também o Excel de <b>Extratos › Posição</b>.${movIgnoradas ? ' Linhas de CDB, Tesouro e outros eventos foram ignoradas.' : ''}</span>`;
   if (fora.length) r += `<br><span class="sub">Não estão mais na posição da B3: ${fora.join(', ')}. Se vendeu, exclua da carteira.</span>`;
@@ -2058,6 +2113,8 @@ async function proventosMes() {
   const mP = dAnt.toISOString().slice(0, 7);
   let atual = 0, anterior = 0, provisionado = 0;
   const det = [];
+  const reais = cart.proventos || [];
+  const realMes = m => reais.filter(p => p.pag.slice(0, 7) === m);
   for (const it of itens) {
     let l; try { l = await buscarProventos(it.sym); } catch (e) { continue; }
     l.forEach(p => {
@@ -2067,7 +2124,23 @@ async function proventosMes() {
       if (pag > hoje && p.d <= hoje) { provisionado += v; det.push({ sym: it.sym, pag, v, futuro: true }); }
     });
   }
-  return { atual, anterior, provisionado, det: det.sort((a, b) => a.pag < b.pag ? -1 : 1) };
+  // meses com extrato importado: usa o que foi realmente recebido
+  let fonteAtual = 'estimado', fonteAnt = 'estimado';
+  const rA = realMes(mA).filter(p => p.pag <= hoje), rP = realMes(mP);
+  if (rA.length) {
+    atual = rA.reduce((s, p) => s + p.v, 0); fonteAtual = 'extrato';
+    for (let k = det.length - 1; k >= 0; k--) if (!det[k].futuro) det.splice(k, 1);
+    rA.forEach(p => det.push({ sym: p.tk + '.SA', pag: p.pag, v: p.v, futuro: false }));
+  }
+  if (rP.length) { anterior = rP.reduce((s, p) => s + p.v, 0); fonteAnt = 'extrato'; }
+  // provisionado: extrato de Eventos da B3, se importado
+  const ar = (cart.aReceber || []).filter(p => p.pag > hoje);
+  if (cart.aReceber && cart.aReceber.length) {
+    provisionado = ar.reduce((s, p) => s + p.v, 0);
+    for (let k = det.length - 1; k >= 0; k--) if (det[k].futuro) det.splice(k, 1);
+    ar.forEach(p => det.push({ sym: p.tk + '.SA', pag: p.pag, v: p.v, futuro: true }));
+  }
+  return { atual, anterior, provisionado, fonteAtual, fonteAnt, det: det.sort((a, b) => a.pag < b.pag ? -1 : 1) };
 }
 
 function telaPainel(soDesenhar) {
@@ -2204,6 +2277,7 @@ function desenharProvPainel(p) {
     <div style="display:flex;justify-content:space-between;text-align:left;margin-top:6px">
       <div><b style="color:var(--txt);font-size:12px">PROVISIONADO</b><div style="color:var(--txt);font-size:16px">${dinheiro(p.provisionado)}</div></div>
       <div style="text-align:right"><b style="color:var(--txt);font-size:12px">MÊS ANTERIOR</b><div style="font-size:15px">${dinheiro(p.anterior)}</div></div></div>
+    <div class="sub" style="font-size:11px;margin-top:6px;text-align:left">${p.fonteAtual === 'extrato' && p.fonteAnt === 'extrato' ? 'Valores recebidos, do extrato da B3.' : p.fonteAtual === 'extrato' || p.fonteAnt === 'extrato' ? 'Mês com extrato importado mostra o valor recebido; o outro é estimado pela quantidade atual.' : 'Estimado pela quantidade atual. Importe o extrato de Movimentação da B3 para ver o valor recebido.'}</div>
     ${p.det.length ? `<div style="margin-top:10px;text-align:left;font-size:12.5px">${p.det.slice(0, 6).map(x => `<div class="linha" style="padding:2px 0"><span style="flex:1">${esc(rot(x.sym))} · ${dataISOparaBR(x.pag)}${x.futuro ? ' <span class="tag">a receber</span>' : ''}</span><b style="color:var(--txt)">${dinheiro(x.v)}</b></div>`).join('')}</div>` : ''}`;
   const c = prepCanvas('cvProv'); if (!c) return;
   const { g, W, H } = c, cx = W / 2, cy = H / 2, max = Math.max(p.atual, p.anterior, 0.01);
