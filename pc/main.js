@@ -172,6 +172,8 @@ function criarJanela() {
       }
     }
   });
+  // garante que a página recebe o teclado ao voltar para a janela (defeito do Electron no Windows)
+  janela.on('focus', () => janela.webContents.focus());
   janela.on('show', () => janela.webContents.executeJavaScript('window.aoVoltarAoApp && window.aoVoltarAoApp()').catch(() => { }));
 }
 function mostrar() {

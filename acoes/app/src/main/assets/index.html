@@ -194,6 +194,10 @@
     main, header, body.v-painel main { max-width: none; margin: 0; }
     main { padding: 12px 24px; } header { padding-left: 24px; padding-right: 24px; }
   }
+  #confirma { display: none; position: fixed; inset: 0; z-index: 40; }
+  #confirma .fundo { position: absolute; inset: 0; background: rgba(0,0,0,.55); }
+  #confirma .caixa { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100vw - 32px));
+    background: var(--card); border: 1px solid var(--linha); border-radius: 14px; padding: 18px; }
   input[type=color] { padding: 2px; height: 42px; width: 52px; flex: none; }
 </style>
 </head>
@@ -628,11 +632,11 @@ async function carregarIndicadoresLista() {   // um por vez, para não sobrecarr
   } finally { carregandoInd = false; }
 }
 // coloca a ação numa lista (ou tira de todas, com "_sem")
-function porNaLista(s, cat) {
+async function porNaLista(s, cat) {
   const it = itemDe(s);
   if (cat === '_sem') {
     if (it) {
-      if (it.qtd > 0 && !confirm(`${rot(s)} tem ${num(+it.qtd, 0)} unidade(s) na carteira. Tirar da carteira?`)) return false;
+      if (it.qtd > 0 && !(await confirmar(`${rot(s)} tem ${num(+it.qtd, 0)} unidade(s) na carteira. Tirar da carteira?`, 'Tirar'))) return false;
       cart.itens = cart.itens.filter(i => i !== it); salvarCart();
     }
     if (!lista.includes(s)) { lista.push(s); gravar('lista', lista); }
@@ -651,7 +655,7 @@ async function adicionar() {
   $('novo').disabled = true;
   try {
     await buscarCotacao(s);
-    if (porNaLista(s, cat)) toast(rot(s) + ' adicionada em ' + (catDe(cat) ? catDe(cat).nome : 'Sem lista'));
+    if (await porNaLista(s, cat)) toast(rot(s) + ' adicionada em ' + (catDe(cat) ? catDe(cat).nome : 'Sem lista'));
     $('novo').value = '';
   } catch (e) {
     toast('Não encontrei "' + rot(s) + '". Confira o código.');
@@ -663,14 +667,14 @@ function moverAcao(s) {
   const atualL = listaDe(s);
   abrirFolha(`<h2>Mover ${esc(rot(s))} para…</h2>
     ${gruposLista().map(g => `<button class="btn sec" style="width:100%;margin-bottom:8px;text-align:left;${g.id === atualL ? 'border-color:' + g.cor : ''}"
-      onclick="if(porNaLista('${esc(s)}','${g.id}')){fecharFolha();telaLista()}"><span class="bola" style="display:inline-block;background:${g.cor};margin-right:8px"></span>${esc(g.nome)}${g.id === atualL ? ' (atual)' : ''}</button>`).join('')}
+      onclick="porNaLista('${esc(s)}','${g.id}').then(ok=>{if(ok){fecharFolha();telaLista()}})"><span class="bola" style="display:inline-block;background:${g.cor};margin-right:8px"></span>${esc(g.nome)}${g.id === atualL ? ' (atual)' : ''}</button>`).join('')}
     <button class="btn sec" style="width:100%" onclick="fecharFolha()">Cancelar</button>`);
 }
-function remover(s) {
+async function remover(s) {
   const it = itemDe(s);
   if (it && it.qtd > 0) {
-    if (!confirm(`${rot(s)} tem ${num(+it.qtd, 0)} unidade(s) na carteira. Remover mesmo assim (sai da carteira também)?`)) return;
-  } else if (!confirm('Remover ' + rot(s) + '?')) return;
+    if (!(await confirmar(`${rot(s)} tem ${num(+it.qtd, 0)} unidade(s) na carteira. Remover mesmo assim (sai da carteira também)?`, 'Remover'))) return;
+  } else if (!(await confirmar('Remover ' + rot(s) + '?', 'Remover'))) return;
   if (it) { cart.itens = cart.itens.filter(i => i !== it); registrarMes(); salvarCart(); }
   lista = lista.filter(x => x !== s); gravar('lista', lista); telaLista();
 }
@@ -705,18 +709,18 @@ async function telaDetalhe() {
           <option value="ifr_abaixo">🟢 Compra: IFR cair até… (sobrevendido)</option>
           <option value="ifr_acima">🔴 Venda: IFR subir até… (sobrecomprado)</option>
         </select>
-        <div id="fPreco"><input id="aValor" type="number" inputmode="decimal" step="0.01" placeholder="Preço alvo"></div>
+        <div id="fPreco"><input id="aValor" type="text" inputmode="decimal" step="0.01" placeholder="Preço alvo"></div>
         <div id="fMM" style="display:none" class="form">
           <div class="linha">
-            <input id="aCurta" type="number" inputmode="numeric" min="1" value="9" placeholder="Curta">
-            <input id="aLonga" type="number" inputmode="numeric" min="2" value="21" placeholder="Longa">
+            <input id="aCurta" type="text" inputmode="numeric" min="1" value="9" placeholder="Curta">
+            <input id="aLonga" type="text" inputmode="numeric" min="2" value="21" placeholder="Longa">
             <select id="aTipoMM"><option value="SMA">MM simples</option><option value="EMA">MM exponencial</option></select>
           </div>
           <div class="sub">Use 1 na curta para “preço cruzar a média”.</div>
         </div>
         <div id="fIFR" style="display:none" class="linha">
-          <input id="aIfrNivel" type="number" inputmode="decimal" min="1" max="99" placeholder="Nível do IFR">
-          <input id="aIfrP" type="number" inputmode="numeric" min="2" value="${ifrCfg.p}" placeholder="Períodos do IFR">
+          <input id="aIfrNivel" type="text" inputmode="decimal" min="1" max="99" placeholder="Nível do IFR">
+          <input id="aIfrP" type="text" inputmode="numeric" min="2" value="${ifrCfg.p}" placeholder="Períodos do IFR">
         </div>
         <select id="aTF" style="display:none"><option value="d" ${tf === 'd' ? 'selected' : ''}>No gráfico diário</option><option value="w" ${tf === 'w' ? 'selected' : ''}>No gráfico semanal</option><option value="m" ${tf === 'm' ? 'selected' : ''}>No gráfico mensal</option></select>
         <input id="aNota" placeholder="Anotação (opcional)">
@@ -986,22 +990,22 @@ function listarAlertasAtivo() {
   const l = alertas().filter(a => a.sym === atual);
   $('alLista').innerHTML = l.length ? l.map(a => linhaAlerta(a, false)).join('') : '<div class="sub">Nenhum alerta para esta ação.</div>';
 }
-function criarAlerta() {
+async function criarAlerta() {
   const t = $('aTipo').value, a = { sym: atual, tipo: t, nota: $('aNota').value.trim() };
   if (t.startsWith('cruza') || t.startsWith('ifr')) a.tf = $('aTF').value;
   if (t.startsWith('ifr')) {
-    a.valor = parseFloat(String($('aIfrNivel').value).replace(',', '.'));
+    a.valor = valorDigitado($('aIfrNivel').value);
     a.ifrP = parseInt($('aIfrP').value, 10) || ifrCfg.p;
     if (!(a.valor > 0 && a.valor < 100)) { toast('Informe o nível do IFR (1 a 99).'); return; }
   } else if (t.startsWith('cruza')) {
     a.mmCurta = parseInt($('aCurta').value, 10); a.mmLonga = parseInt($('aLonga').value, 10); a.tipoMM = $('aTipoMM').value;
     if (!(a.mmCurta >= 1) || !(a.mmLonga >= 2) || a.mmCurta >= a.mmLonga) { toast('A média curta deve ser menor que a longa.'); return; }
   } else {
-    a.valor = parseFloat(String($('aValor').value).replace(',', '.'));
+    a.valor = valorDigitado($('aValor').value);
     if (!(a.valor > 0)) { toast('Informe o preço alvo.'); return; }
     const q = cotacoes[atual];
     if (q && ((t === 'abaixo' && q.preco <= a.valor) || (t === 'acima' && q.preco >= a.valor)))
-      if (!confirm('O preço atual (' + num(q.preco) + ') já atende essa condição — o alerta vai disparar na próxima verificação. Criar mesmo assim?')) return;
+      if (!(await confirmar('O preço atual (' + num(q.preco) + ') já atende essa condição — o alerta vai disparar na próxima verificação. Criar mesmo assim?', 'Criar'))) return;
   }
   B.addAlerta(JSON.stringify(a)); agendarSync();
   $('aValor').value = ''; $('aNota').value = ''; $('aIfrNivel').value = '';
@@ -1010,7 +1014,7 @@ function criarAlerta() {
   if (!B.notificacoesLiberadas()) toast('Atenção: as notificações do app estão desligadas nas configurações do Android.');
 }
 function ativar(id, on) { B.ativarAlerta(id, on); agendarSync(); render(); }
-function apagar(id) { if (!confirm('Excluir este alerta?')) return; B.removerAlerta(id); agendarSync(); render(); }
+async function apagar(id) { if (!(await confirmar('Excluir este alerta?', 'Excluir'))) return; B.removerAlerta(id); agendarSync(); render(); }
 
 /* ===================== Tela: alertas ===================== */
 function telaAlertas() {
@@ -1044,7 +1048,7 @@ function telaMedias() {
       <button class="x" onclick="medias.splice(${i},1);gravar('medias',medias);telaMedias()">×</button></div>`).join('') : '<div class="sub">Nenhuma média.</div>') + `</div>
     <div class="card"><h2>Adicionar média</h2><div class="form">
       <div class="linha">
-        <input id="mP" type="number" inputmode="numeric" min="2" placeholder="Períodos (ex.: 50)">
+        <input id="mP" type="text" inputmode="numeric" min="2" placeholder="Períodos (ex.: 50)">
         <select id="mT"><option value="SMA">Simples (MM)</option><option value="EMA">Exponencial (MME)</option></select>
         <input id="mC" type="color" value="${CORES[medias.length % CORES.length]}">
       </div>
@@ -1054,10 +1058,10 @@ function telaMedias() {
     <div class="card"><div class="linha" style="margin-bottom:10px"><h2 style="flex:1;margin:0">IFR (RSI)</h2>
       <label class="sw"><input type="checkbox" ${ifrCfg.on ? 'checked' : ''} onchange="ifrCfg.on=this.checked;gravar('ifr',ifrCfg)"><span></span></label></div>
       <div class="form">
-        <div class="linha"><label class="sub" style="flex:1">Períodos do IFR</label><input style="width:90px" type="number" min="2" max="100" value="${ifrCfg.p}" onchange="setIFR('p',this.value,2,100)"></div>
-        <div class="linha"><label class="sub" style="flex:1">Média do IFR</label><input style="width:90px" type="number" min="2" max="100" value="${ifrCfg.mm}" onchange="setIFR('mm',this.value,2,100)"></div>
-        <div class="linha"><label class="sub" style="flex:1">Sobrecomprado (linha de cima)</label><input style="width:90px" type="number" min="51" max="99" value="${ifrCfg.sup}" onchange="setIFR('sup',this.value,51,99)"></div>
-        <div class="linha"><label class="sub" style="flex:1">Sobrevendido (linha de baixo)</label><input style="width:90px" type="number" min="1" max="49" value="${ifrCfg.inf}" onchange="setIFR('inf',this.value,1,49)"></div>
+        <div class="linha"><label class="sub" style="flex:1">Períodos do IFR</label><input style="width:90px" type="text" inputmode="numeric" min="2" max="100" value="${ifrCfg.p}" onchange="setIFR('p',this.value,2,100)"></div>
+        <div class="linha"><label class="sub" style="flex:1">Média do IFR</label><input style="width:90px" type="text" inputmode="numeric" min="2" max="100" value="${ifrCfg.mm}" onchange="setIFR('mm',this.value,2,100)"></div>
+        <div class="linha"><label class="sub" style="flex:1">Sobrecomprado (linha de cima)</label><input style="width:90px" type="text" inputmode="numeric" min="51" max="99" value="${ifrCfg.sup}" onchange="setIFR('sup',this.value,51,99)"></div>
+        <div class="linha"><label class="sub" style="flex:1">Sobrevendido (linha de baixo)</label><input style="width:90px" type="text" inputmode="numeric" min="1" max="49" value="${ifrCfg.inf}" onchange="setIFR('inf',this.value,1,49)"></div>
       </div></div>
     <div style="text-align:center;margin-bottom:12px"><button class="btn sec peq" onclick="restaurarPadrao()">Voltar ao padrão (MM 9, 21, 50, 80 e IFR 9)</button></div>
     <div class="card"><h2>Fontes de dados</h2>
@@ -1095,8 +1099,8 @@ async function salvarSync() {
   await sincronizarAgora(false);
   telaMedias();
 }
-function desligarSync() {
-  if (!confirm('Desligar a sincronização neste aparelho? Os dados daqui ficam como estão.')) return;
+async function desligarSync() {
+  if (!(await confirmar('Desligar a sincronização neste aparelho? Os dados daqui ficam como estão.', 'Desligar'))) return;
   B.save('syncUrl', ''); B.save('syncChave', ''); telaMedias();
 }
 function setIFR(k, v, min, max) {
@@ -1238,7 +1242,7 @@ function telaCarteira() {
   const ap = aportes().slice().sort((a, b) => a.d < b.d ? 1 : -1);
   h += `<div class="card"><div class="linha"><h2 style="flex:1;margin:0">Aportes</h2><b>${dinheiro(totalAportado())}</b></div>
     <div class="linha" style="margin-top:10px">
-      <input id="apV" type="number" inputmode="decimal" step="0.01" placeholder="Valor (R$)">
+      <input id="apV" type="text" inputmode="decimal" step="0.01" placeholder="Valor (R$)">
       <input id="apD" type="date" value="${hojeISO()}" style="flex:none;width:150px">
       <button class="btn peq" onclick="registrarAporte()">+</button></div>
     <div class="sub" style="margin:6px 0 4px">Use valor negativo para resgate.</div>
@@ -1291,15 +1295,15 @@ function rentabilidadeMensal() {
   });
 }
 function registrarAporte(v) {
-  const valor = v != null ? v : parseFloat(String($('apV').value).replace(',', '.'));
+  const valor = v != null ? v : valorDigitado($('apV').value);
   const d = v != null ? hojeISO() : ($('apD').value || hojeISO());
   if (!valor) { toast('Informe o valor do aporte.'); return; }
   aportes().push({ id: novoId(), d, v: +valor.toFixed(2) });
   if (v != null) aporteSim = '';
   salvarCart(); telaCarteira(); toast('Aporte de ' + dinheiro(valor) + ' registrado');
 }
-function apagarAporte(id) {
-  if (!confirm('Apagar este aporte?')) return;
+async function apagarAporte(id) {
+  if (!(await confirmar('Apagar este aporte?', 'Apagar'))) return;
   cart.aportes = aportes().filter(a => a.id !== id); salvarCart(); telaCarteira();
 }
 function desenharDistribuicao(porCat, total) {
@@ -1441,6 +1445,28 @@ function desenharHist() {
 }
 
 /* --- folha (janela por cima) --- */
+// confirmação dentro do app (no PC, a caixa de confirmação nativa do Windows trava a digitação depois de fechada)
+// número digitado pelo usuário: 58,50 · 58.50 · 1.234,56 · 1,234.56
+function valorDigitado(x) {
+  let t = String(x == null ? '' : x).replace(/\s|R\$/g, '');
+  if (!t) return NaN;
+  if (t.includes(',') && t.includes('.')) t = t.lastIndexOf(',') > t.lastIndexOf('.') ? t.replace(/\./g, '').replace(',', '.') : t.replace(/,/g, '');
+  else if (t.includes(',')) t = t.replace(',', '.');
+  else if ((t.match(/\./g) || []).length > 1) t = t.replace(/\./g, '');
+  return parseFloat(t);
+}
+function confirmar(msg, sim = 'Confirmar') {
+  return new Promise(res => {
+    let el = $('confirma');
+    if (!el) { el = document.createElement('div'); el.id = 'confirma'; document.body.appendChild(el); }
+    el.innerHTML = `<div class="fundo"></div><div class="caixa"><div style="margin-bottom:16px;line-height:1.45">${esc(msg)}</div>
+      <div class="linha" style="justify-content:flex-end"><button class="btn sec" id="cfNao">Cancelar</button><button class="btn" id="cfSim">${esc(sim)}</button></div></div>`;
+    el.style.display = 'block';
+    const fim = v => { el.style.display = 'none'; el.innerHTML = ''; res(v); };
+    $('cfSim').onclick = () => fim(true); $('cfNao').onclick = () => fim(false); el.querySelector('.fundo').onclick = () => fim(false);
+    setTimeout(() => $('cfSim') && $('cfSim').focus(), 30);
+  });
+}
 function abrirFolha(html) {
   let f = $('folha');
   if (!f) { f = document.createElement('div'); f.id = 'folha'; document.body.appendChild(f); }
@@ -1457,14 +1483,14 @@ function formItem(id, catId) {
     <div class="modo"><button id="tpA" class="${manual ? '' : 'on'}" onclick="tipoItem(false)">Com cotação</button><button id="tpM" class="${manual ? 'on' : ''}" onclick="tipoItem(true)">Valor manual</button></div>
     <div id="fA" class="form" style="${manual ? 'display:none' : ''}">
       <input id="iSym" placeholder="Código: PETR4, HGLG11, AAPL34…" autocapitalize="characters" value="${it && it.sym ? esc(rot(it.sym)) : ''}">
-      <div class="linha"><input id="iQtd" type="number" inputmode="decimal" placeholder="Quantidade" value="${it && it.sym ? it.qtd : ''}">
-        <input id="iPm" type="number" inputmode="decimal" step="0.01" placeholder="Preço médio (opcional)" value="${it && it.pm ? it.pm : ''}"></div>
-      <input id="iAlvo" type="number" inputmode="decimal" step="0.01" placeholder="Preço-alvo de compra (opcional)" value="${it && it.alvo ? it.alvo : ''}">
+      <div class="linha"><input id="iQtd" type="text" inputmode="decimal" placeholder="Quantidade" value="${it && it.sym ? it.qtd : ''}">
+        <input id="iPm" type="text" inputmode="decimal" step="0.01" placeholder="Preço médio (opcional)" value="${it && it.pm ? it.pm : ''}"></div>
+      <input id="iAlvo" type="text" inputmode="decimal" step="0.01" placeholder="Preço-alvo de compra (opcional)" value="${it && it.alvo ? it.alvo : ''}">
       <div class="sub">Com preço-alvo, o ativo fica marcado “COMPRA” quando o preço está igual ou abaixo dele.</div>
     </div>
     <div id="fM" class="form" style="${manual ? '' : 'display:none'}">
       <input id="iNome" placeholder="Nome (ex.: Conta, CDB, Tesouro Selic)" value="${it && !it.sym ? esc(it.nome) : ''}">
-      <input id="iValor" type="number" inputmode="decimal" step="0.01" placeholder="Valor atual (R$)" value="${it && !it.sym ? it.valor : ''}">
+      <input id="iValor" type="text" inputmode="decimal" step="0.01" placeholder="Valor atual (R$)" value="${it && !it.sym ? it.valor : ''}">
     </div>
     <select id="iCat">${cart.cats.map(c => `<option value="${c.id}" ${c.id === cat ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select>
     <div class="linha"><button class="btn" style="flex:1" onclick="salvarItem('${id || ''}')">Salvar</button>
@@ -1477,7 +1503,7 @@ function tipoItem(m) {
 }
 async function salvarItem(id) {
   const manual = $('tpM').classList.contains('on');
-  const n = x => parseFloat(String(x).replace(',', '.'));
+  const n = valorDigitado;
   const it = id ? cart.itens.find(i => i.id === id) : { id: novoId() };
   it.cat = $('iCat').value;
   if (manual) {
@@ -1496,8 +1522,8 @@ async function salvarItem(id) {
   if (!id) cart.itens.push(it);
   registrarMes(); salvarCart(); fecharFolha(); telaCarteira(); toast('Salvo');
 }
-function removerItem(id) {
-  if (!confirm('Excluir este ativo da carteira?')) return;
+async function removerItem(id) {
+  if (!(await confirmar('Excluir este ativo da carteira?', 'Excluir'))) return;
   cart.itens = cart.itens.filter(i => i.id !== id); registrarMes(); salvarCart(); fecharFolha(); telaCarteira();
 }
 
@@ -1530,7 +1556,7 @@ function editarListas() {
     <input value="${esc(c.nome)}" onchange="cart.cats[${i}].nome=this.value.trim().toUpperCase()||'LISTA'">
     ${c === r
       ? `<input style="width:80px;flex:none;opacity:.7" value="${num(c.meta, 2)}" disabled title="restante">`
-      : `<input style="width:80px;flex:none" type="number" inputmode="decimal" min="0" max="100" step="0.5" value="${c.meta}" onchange="cart.cats[${i}].meta=parseFloat(this.value.replace(',','.'))||0;ajustarMetas('${c.id}');editarListas()">`}
+      : `<input style="width:80px;flex:none" type="text" inputmode="decimal" min="0" max="100" step="0.5" value="${c.meta}" onchange="cart.cats[${i}].meta=valorDigitado(this.value)||0;ajustarMetas('${c.id}');editarListas()">`}
     <span class="sub">%</span><button class="x" onclick="apagarLista(${i})">×</button></div>`).join('');
   abrirFolha(`<h2>Listas e metas</h2><div class="sub" style="margin-bottom:10px">Nome, cor e % da carteira que cada lista deve ter. A soma fecha sempre em 100%.</div>
     ${linhas}
@@ -1543,9 +1569,9 @@ function editarListas() {
 function novaLista() {
   cart.cats.push({ id: novoId(), nome: 'NOVA LISTA', meta: 0, cor: CORES[cart.cats.length % CORES.length] }); editarListas();
 }
-function apagarLista(i) {
+async function apagarLista(i) {
   const c = cart.cats[i], n = cart.itens.filter(x => x.cat === c.id).length;
-  if (n && !confirm(`A lista ${c.nome} tem ${n} ativo(s). Apagar a lista e esses ativos?`)) return;
+  if (n && !(await confirmar(`A lista ${c.nome} tem ${n} ativo(s). Apagar a lista e esses ativos?`, 'Apagar'))) return;
   cart.itens = cart.itens.filter(x => x.cat !== c.id); cart.cats.splice(i, 1); ajustarMetas(); editarListas();
 }
 
