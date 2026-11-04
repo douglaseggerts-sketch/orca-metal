@@ -33,7 +33,7 @@ async function baixar(baixarTexto, sym, tf) {
     if (!c.length) throw new Error('sem preço para ' + sym);
     preco = c[c.length - 1];
   } else if (c.length) c[c.length - 1] = preco; else c.push(preco);
-  return { preco, moeda: r.meta.currency || 'BRL', fech: c };
+  return { preco, moeda: sym.startsWith('^') ? 'PTS' : r.meta.currency || 'BRL', fech: c };
 }
 
 function media(v, p, tipo) {
@@ -67,10 +67,12 @@ function ifr(v, p) {
 }
 
 function dinheiro(v, moeda) {
+  if (moeda === 'PTS') return v.toLocaleString('pt-BR', { maximumFractionDigits: v >= 1000 ? 0 : 2 }) + ' pts';
   try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: moeda }).format(v); }
   catch (e) { return v.toFixed(2); }
 }
-const rot = s => s.replace(/\.SA$/, '');
+const CURTO = { '^BVSP': 'IBOV', '^GSPC': 'S&P 500', '^IXIC': 'NASDAQ', '^DJI': 'DOW JONES', 'BRL=X': 'DÓLAR', 'EURBRL=X': 'EURO', 'BTC-USD': 'BITCOIN' };
+const rot = s => CURTO[s] || s.replace(/\.SA$/, '');
 const nomeMM = (p, t) => p <= 1 ? 'Preço' : (t === 'EMA' ? 'MME' : 'MM') + p;
 
 /**

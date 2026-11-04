@@ -51,7 +51,7 @@ final class AlertEngine {
         JSONObject r = res.getJSONObject(0);
         JSONObject meta = r.getJSONObject("meta");
         Serie s = new Serie();
-        s.moeda = meta.optString("currency", "BRL");
+        s.moeda = simbolo.startsWith("^") ? "PTS" : meta.optString("currency", "BRL");
         JSONArray close = r.getJSONObject("indicators").getJSONArray("quote")
                 .getJSONObject(0).optJSONArray("close");
         JSONArray ts = r.optJSONArray("timestamp");
@@ -150,6 +150,11 @@ final class AlertEngine {
     }
 
     static String dinheiro(double v, String moeda) {
+        if ("PTS".equals(moeda)) {
+            NumberFormat n = NumberFormat.getNumberInstance(new Locale("pt", "BR"));
+            n.setMaximumFractionDigits(v >= 1000 ? 0 : 2);
+            return n.format(v) + " pts";
+        }
         NumberFormat f = NumberFormat.getCurrencyInstance(new Locale("pt", "BR"));
         try {
             f.setCurrency(Currency.getInstance(moeda));
@@ -159,6 +164,16 @@ final class AlertEngine {
     }
 
     static String rotulo(String simbolo) {
+        switch (simbolo) {
+            case "^BVSP": return "IBOV";
+            case "^GSPC": return "S&P 500";
+            case "^IXIC": return "NASDAQ";
+            case "^DJI": return "DOW JONES";
+            case "BRL=X": return "DÓLAR";
+            case "EURBRL=X": return "EURO";
+            case "BTC-USD": return "BITCOIN";
+            default: break;
+        }
         return simbolo.endsWith(".SA") ? simbolo.substring(0, simbolo.length() - 3) : simbolo;
     }
 

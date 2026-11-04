@@ -325,16 +325,24 @@ const BARRAS_ANO = { d: 252, w: 52, m: 12 };
 /* ===================== Utilidades ===================== */
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const rot = s => s.replace(/\.SA$/, '');
-const mercado = s => s.endsWith('.SA') ? 'B3' : 'EUA';
+// índices e moedas: nome que você digita → código do Yahoo
+const APELIDOS = { IBOV: '^BVSP', IBOVESPA: '^BVSP', BVSP: '^BVSP', IFIX: 'IFIX.SA', SMLL: '^SMLL', IDIV: 'IDIV.SA',
+  SPX: '^GSPC', SP500: '^GSPC', 'S&P500': '^GSPC', NASDAQ: '^IXIC', IXIC: '^IXIC', DOW: '^DJI', DJI: '^DJI', DOWJONES: '^DJI',
+  DOLAR: 'BRL=X', 'DÓLAR': 'BRL=X', USD: 'BRL=X', USDBRL: 'BRL=X', EURO: 'EURBRL=X', EUR: 'EURBRL=X', BITCOIN: 'BTC-USD', BTC: 'BTC-USD' };
+const NOME_CURTO = { '^BVSP': 'IBOV', '^SMLL': 'SMLL', '^GSPC': 'S&P 500', '^IXIC': 'NASDAQ', '^DJI': 'DOW JONES', 'BRL=X': 'DÓLAR', 'EURBRL=X': 'EURO', 'BTC-USD': 'BITCOIN' };
+const ehIndice = s => /^\^/.test(s) || ['IFIX.SA', 'IDIV.SA'].includes(s);
+const rot = s => NOME_CURTO[s] || s.replace(/\.SA$/, '');
+const mercado = s => ehIndice(s) ? 'Índice' : /=X$/.test(s) ? 'Câmbio' : /-USD$/.test(s) ? 'Cripto' : s.endsWith('.SA') ? 'B3' : 'EUA';
 function normalizar(s) {
   s = s.trim().toUpperCase().replace(/\s+/g, '');
   if (!s) return '';
+  if (APELIDOS[s]) return APELIDOS[s];
   if (/^[A-Z]{4}\d{1,2}F?$/.test(s)) s = s.replace(/F$/, '') + '.SA';
   return s;
 }
 function dinheiro(v, moeda) {
   if (v == null || isNaN(v)) return '—';
+  if (moeda === 'PTS') return v.toLocaleString('pt-BR', { maximumFractionDigits: v >= 1000 ? 0 : 2 }) + ' pts';
   try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: moeda || 'BRL' }).format(v); }
   catch (e) { return v.toFixed(2); }
 }
@@ -388,7 +396,7 @@ function smaN(v, p) {
 
 /* ===================== Dados (Yahoo Finance) ===================== */
 const URL_Y = 'https://query1.finance.yahoo.com/v8/finance/chart/';
-function interpretar(txt) {
+function interpretar(txt, sym) {
   const j = JSON.parse(txt);
   if (j.chart && j.chart.error) throw new Error(j.chart.error.description || 'erro');
   const r = j.chart.result && j.chart.result[0];
@@ -401,11 +409,11 @@ function interpretar(txt) {
     pts.push({ t: ts[i], c: c[i], o: ab, h: hi[i] != null ? hi[i] : Math.max(ab, c[i]), l: lo[i] != null ? lo[i] : Math.min(ab, c[i]), v: vol[i] || 0 });
   }
   const m = r.meta;
-  return { pts, preco: m.regularMarketPrice, moeda: m.currency || 'BRL', nome: m.shortName || m.longName || '', hora: m.regularMarketTime || null, volume: m.regularMarketVolume || null };
+  return { pts, preco: m.regularMarketPrice, moeda: ehIndice(sym || m.symbol || '') || m.instrumentType === 'INDEX' ? 'PTS' : m.currency || 'BRL', nome: m.shortName || m.longName || '', hora: m.regularMarketTime || null, volume: m.regularMarketVolume || null };
 }
 async function buscarCotacao(sym) {
   const txt = await chamar('fetch', URL_Y + encodeURIComponent(sym) + '?range=5d&interval=1d');
-  const d = interpretar(txt);
+  const d = interpretar(txt, sym);
   // um ponto por dia (fora do pregão o Yahoo repete o último dia)
   const porDia = {};
   d.pts.forEach(x => porDia[new Date((x.t - 3 * 3600) * 1000).toISOString().slice(0, 10)] = x);
@@ -450,7 +458,7 @@ async function buscarHistorico(sym, f) {
   if (!h.base) {
     // histórico diário completo (period1/period2 garante barras diárias)
     const url = URL_Y + encodeURIComponent(sym) + '?period1=0&period2=' + Math.floor(Date.now() / 1000 + 86400) + '&interval=1d';
-    const d = interpretar(await chamar('fetch', url));
+    const d = interpretar(await chamar('fetch', url), sym);
     // um candle por dia: junta repetições do mesmo dia (o Yahoo às vezes manda o dia atual duas vezes)
     const base = [];
     d.pts.forEach(p => {
@@ -609,7 +617,7 @@ function formAdicionar() {
   abrirFolha(`<h2>Adicionar ação</h2><div class="form">
     <input id="novo" placeholder="Código: PETR4, HGLG11, AAPL…" autocapitalize="characters" autocomplete="off" onkeydown="if(event.key==='Enter')adicionar()">
     <select id="novoLista">${grupos.map(g => `<option value="${g.id}" ${g.id === destino ? 'selected' : ''}>Lista ${esc(g.nome)}</option>`).join('')}</select>
-    <div class="sub">B3 pelo código (PETR4, HGLG11, BOVA11). EUA pelo ticker (AAPL).</div>
+    <div class="sub">B3 pelo código (PETR4, HGLG11, BOVA11). EUA pelo ticker (AAPL). Índices e moedas: IBOV, SMLL, IFIX, S&amp;P500, NASDAQ, DOLAR, EURO, BITCOIN.</div>
     <div class="linha"><button class="btn" style="flex:1" onclick="adicionar()">Adicionar</button><button class="btn sec" onclick="fecharFolha()">Fechar</button></div></div>`);
   setTimeout(() => $('novo') && $('novo').focus(), 100);
 }
@@ -1868,7 +1876,7 @@ const fundMem = {}, provMem = {};
 let fundCache = ler('fundCache', {});      // { sym: { t, d } } — só neste aparelho
 let fundHist = ler('fundHist', {});        // { sym: { 'AAAA-MM': {pl, pvp, dy} } } — sincronizado
 const chaveBolsai = () => (B.load('bolsaiChave') || '').trim();
-const ehB3 = s => /\.SA$/.test(s);
+const ehB3 = s => /\.SA$/.test(s) && !ehIndice(s);
 async function buscarTexto(url, cab) {
   if (B.fetchCom) return chamar('fetchCom', url, cab ? JSON.stringify(cab) : '');
   return chamar('fetch', url);
@@ -2319,7 +2327,7 @@ const ultimoAnoMem = {};
 async function buscarRecente(sym) {
   if (ultimoAnoMem[sym] && Date.now() - ultimoAnoMem[sym].t < 30 * 60e3) return ultimoAnoMem[sym].d;
   const agora = Math.floor(Date.now() / 1000);
-  const d = interpretar(await chamar('fetch', URL_Y + encodeURIComponent(sym) + `?period1=${agora - 800 * 86400}&period2=${agora + 86400}&interval=1d`));
+  const d = interpretar(await chamar('fetch', URL_Y + encodeURIComponent(sym) + `?period1=${agora - 800 * 86400}&period2=${agora + 86400}&interval=1d`), sym);
   const pts = [];
   d.pts.forEach(p => { const dia = diaDe(p.t); if (pts.length && pts[pts.length - 1].dia === dia) pts[pts.length - 1].c = p.c; else pts.push({ dia, c: p.c }); });
   if (pts.length && d.preco != null) pts[pts.length - 1].c = d.preco;
