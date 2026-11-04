@@ -2041,6 +2041,14 @@ async function historicoIndicador(sym, k) {
       if (l.length) return { fonte: 'Bolsai (trimestral)', pontos: l };
     } catch (e) { }
   }
+  // plano grátis: valor em 31/12 de cada ano (até 12 anos), guardado depois da primeira vez
+  if (chaveBolsai() && !/11$/.test(rot(sym))) {
+    let anos = [], erro = null;
+    try { anos = await anoAnoBolsai(sym, n => { const e = $('histProg'); if (e) e.textContent = `Carregando… ${n} de até 12 anos`; }); } catch (e) { erro = e; }
+    const l = anos.filter(x => x[k] != null).map(x => ({ rot: String(x.ano), v: x[k], d: String(x.ano) }));
+    if (l.length) return { fonte: 'Bolsai (valor em 31/12 de cada ano)', pontos: l, anual: true };
+    if (erro) histErro = /429/.test(erro.message) ? 'limite diário da Bolsai atingido; tente amanhã' : /40[13]/.test(erro.message) ? 'a Bolsai recusou a consulta por data (chave inválida ou só no plano Pro)' : erro.message;
+  }
   const h = fundHist[sym] || {};
   return { fonte: 'registro mensal do app', pontos: Object.keys(h).sort().filter(m => h[m][k] != null).map(m => ({ rot: nomeMes(m), v: h[m][k], d: m })) };
 }
@@ -2085,12 +2093,23 @@ async function cardIndicadores(sym) {
 }
 
 /* --- Lucro × Cotação (lucro anual pela Bolsai, cotação de fim de ano pelo Yahoo) --- */
-let lucroHist = ler('lucroHist', {});   // { sym: { ano: lucro em R$ | null } } — anos fechados não mudam
+let lucroHist = ler('lucroHist', {});   // { sym: { ano: {l, pl, pvp} | null } } — anos fechados não mudam
 async function lucroAnual(sym, aoProgresso) {
+  return (await anoAnoBolsai(sym, aoProgresso)).filter(x => x.l != null).map(x => ({ ano: x.ano, lucro: x.l }));
+}
+// indicadores no fim de cada ano (31/12) pela Bolsai: lucro, P/L e P/VP
+// (se já estiver carregando para esta ação, espera a mesma busca em vez de consultar de novo)
+const anoEmCurso = {};
+function anoAnoBolsai(sym, aoProgresso) {
+  if (!anoEmCurso[sym]) anoEmCurso[sym] = buscarAnoAno(sym, aoProgresso).finally(() => { delete anoEmCurso[sym]; });
+  return anoEmCurso[sym];
+}
+async function buscarAnoAno(sym, aoProgresso) {
   const T = rot(sym), h = lucroHist[sym] = lucroHist[sym] || {};
   const anoAtual = new Date().getFullYear();
   let falhas = 0, erro = null;
   for (let y = anoAtual - 1; y >= anoAtual - 12; y--) {
+    if (typeof h[y] === 'number') delete h[y];    // versão antiga guardava só o lucro: busca de novo com P/L e P/VP
     if (y in h) { if (h[y] == null) falhas++; else falhas = 0; if (falhas >= 2) break; continue; }
     try {
       const j = await bolsai(`fundamentals/${T}?reference_date=${y}-12-31`);
@@ -2099,7 +2118,9 @@ async function lucroAnual(sym, aoProgresso) {
       else {
         // lucro anual = valor de mercado ÷ P/L (evita dúvida sobre a unidade do campo net_income)
         const l = j.market_cap && j.pl ? j.market_cap / j.pl : j.net_income != null ? j.net_income * 1000 : null;
-        h[y] = l; falhas = l == null ? falhas + 1 : 0;
+        const pl = j.pl != null ? +j.pl : null, pvp = j.pvp != null ? +j.pvp : null;
+        h[y] = l == null && pl == null && pvp == null ? null : { l, pl, pvp };
+        falhas = h[y] == null ? falhas + 1 : 0;
       }
     } catch (e) {
       erro = e;
@@ -2111,13 +2132,13 @@ async function lucroAnual(sym, aoProgresso) {
     if (falhas >= 2) break;                      // empresa ainda não existia / sem dados antigos
   }
   gravar('lucroHist', lucroHist);
-  const anos = Object.keys(h).map(Number).filter(y => h[y] != null).sort((a, b) => a - b);
+  const anos = Object.keys(h).map(Number).filter(y => h[y] && typeof h[y] === 'object').sort((a, b) => a - b);
   if (!anos.length && erro) throw erro;
-  return anos.map(y => ({ ano: y, lucro: h[y] }));
+  return anos.map(y => ({ ano: y, l: h[y].l, pl: h[y].pl, pvp: h[y].pvp }));
 }
 async function cardLucro(sym, carregar) {
   const el = $('lucroCard'); if (!el) return;
-  const temCache = lucroHist[sym] && Object.values(lucroHist[sym]).some(v => v != null);
+  const temCache = lucroHist[sym] && Object.values(lucroHist[sym]).some(v => v && typeof v === 'object');
   if (!chaveBolsai()) {
     el.innerHTML = `<div class="card"><h2>Lucro × Cotação</h2><div class="sub">Precisa da chave grátis da Bolsai: cole em Indicadores › Fontes de dados.</div></div>`;
     return;
@@ -2208,10 +2229,10 @@ async function cardProventos(sym) {
 }
 
 /* --- janela de histórico (linha ou barras), no estilo do Status Invest --- */
-let histModo = 'linha';
+let histModo = 'linha', histErro = null;
 async function abrirHistorico(sym, k) {
-  abrirFolha(`<h2>${ROT_IND[k]} — histórico</h2><div class="sub">Carregando…</div>`);
-  let pontos = [], fonte = '', atualV = null;
+  abrirFolha(`<h2>${ROT_IND[k]} — histórico</h2><div class="sub" id="histProg">Carregando…</div>`);
+  let pontos = [], fonte = '', atualV = null; histErro = null;
   try {
     if (k === 'dy') {
       const r = await historicoDY(sym);
@@ -2240,7 +2261,7 @@ async function abrirHistorico(sym, k) {
     </div>
     <div class="modo" style="justify-content:center;margin-bottom:8px"><button id="hL" class="${histModo === 'linha' ? 'on' : ''}" onclick="histModo='linha';desenharHistInd()">Linha</button><button id="hB" class="${histModo === 'barras' ? 'on' : ''}" onclick="histModo='barras';desenharHistInd()">Barras</button></div>
     <div class="grafico" style="height:230px"><canvas id="cvInd"></canvas></div>
-    <div class="sub" style="font-size:11px;margin-top:6px">${pouco ? 'O histórico deste indicador está sendo formado: o app guarda um valor por mês a partir de agora. Com a chave Pro da Bolsai aparece o histórico trimestral completo.<br>' : ''}Fonte: ${esc(fonte)}.</div>
+    <div class="sub" style="font-size:11px;margin-top:6px">${pouco ? (chaveBolsai() ? `Não consegui o histórico anual pela Bolsai${histErro ? ' (' + esc(String(histErro)).slice(0, 120) + ')' : ''}. Enquanto isso o app guarda um valor por mês.<br>` : 'Para ver os últimos anos, cole a chave grátis da Bolsai em Indicadores › Fontes de dados. Sem ela, o app guarda um valor por mês a partir de agora.<br>') : ''}Fonte: ${esc(fonte)}.</div>
     <button class="btn sec" style="margin-top:12px;width:100%" onclick="fecharFolha()">Fechar</button>`);
   histInd = { pontos: todos, media, f };
   desenharHistInd();
