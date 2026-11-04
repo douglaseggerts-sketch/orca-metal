@@ -2041,10 +2041,10 @@ async function historicoIndicador(sym, k) {
       if (l.length) return { fonte: 'Bolsai (trimestral)', pontos: l };
     } catch (e) { }
   }
-  // plano grátis: valor em 31/12 de cada ano (até 12 anos), guardado depois da primeira vez
+  // plano grátis: valor em 31/12 de cada ano (até 14 anos), guardado depois da primeira vez
   if (chaveBolsai() && !/11$/.test(rot(sym))) {
     let anos = [], erro = null;
-    try { anos = await anoAnoBolsai(sym, n => { const e = $('histProg'); if (e) e.textContent = `Carregando… ${n} de até 12 anos`; }); } catch (e) { erro = e; }
+    try { anos = await anoAnoBolsai(sym, n => { const e = $('histProg'); if (e) e.textContent = `Carregando… ${n} de até 14 anos`; }); } catch (e) { erro = e; }
     const l = anos.filter(x => x[k] != null).map(x => ({ rot: String(x.ano), v: x[k], d: String(x.ano) }));
     if (l.length) return { fonte: 'Bolsai (valor em 31/12 de cada ano)', pontos: l, anual: true };
     if (erro) histErro = /429/.test(erro.message) ? 'limite diário da Bolsai atingido; tente amanhã' : /40[13]/.test(erro.message) ? 'a Bolsai recusou a consulta por data (chave inválida ou só no plano Pro)' : erro.message;
@@ -2108,7 +2108,7 @@ async function buscarAnoAno(sym, aoProgresso) {
   const T = rot(sym), h = lucroHist[sym] = lucroHist[sym] || {};
   const anoAtual = new Date().getFullYear();
   let falhas = 0, erro = null;
-  for (let y = anoAtual - 1; y >= anoAtual - 12; y--) {
+  for (let y = anoAtual - 1; y >= anoAtual - 14; y--) {
     if (typeof h[y] === 'number') delete h[y];    // versão antiga guardava só o lucro: busca de novo com P/L e P/VP
     if (y in h) { if (h[y] == null) falhas++; else falhas = 0; if (falhas >= 2) break; continue; }
     try {
@@ -2146,14 +2146,14 @@ async function cardLucro(sym, carregar) {
   if (!carregar && !temCache) {
     el.innerHTML = `<div class="card"><div class="linha"><h2 style="flex:1;margin:0">Lucro × Cotação</h2>
       <button class="btn sec peq" onclick="cardLucro('${esc(sym)}', true)">Carregar</button></div>
-      <div class="sub" style="font-size:12px;margin-top:6px">Usa até 12 consultas da Bolsai na primeira vez (o plano grátis tem 200 por dia). Depois fica guardado.</div></div>`;
+      <div class="sub" style="font-size:12px;margin-top:6px">Usa até 14 consultas da Bolsai na primeira vez (o plano grátis tem 200 por dia). Depois fica guardado.</div></div>`;
     return;
   }
   el.innerHTML = `<div class="card"><h2>Lucro × Cotação</h2><div class="sub" id="lucroProg">Carregando…</div></div>`;
   let lucros, h;
   try {
     [lucros, h] = await Promise.all([
-      lucroAnual(sym, n => { const p = $('lucroProg'); if (p) p.textContent = `Carregando… ${n} de até 12 anos`; }),
+      lucroAnual(sym, n => { const p = $('lucroProg'); if (p) p.textContent = `Carregando… ${n} de até 14 anos`; }),
       buscarHistorico(sym, 'm')
     ]);
   } catch (e) {
@@ -2168,7 +2168,9 @@ async function cardLucro(sym, carregar) {
   const pts = lucros.map(x => ({ rot: String(x.ano), lucro: x.lucro, preco: fech[x.ano] ?? null }));
   const f = fundMem[sym] || (fundCache[sym] || {}).d || {};
   const q = cotacoes[sym] || {};
-  if (f.lucro12m != null || q.preco != null) pts.push({ rot: 'Atual', lucro: f.lucro12m != null ? f.lucro12m : null, preco: q.preco ?? h.preco ?? null });
+  // mesmo cálculo dos anos (valor de mercado ÷ P/L); se faltar, usa o lucro 12 meses do Fundamentus
+  const l12 = f.valorMercado && f.pl ? f.valorMercado / f.pl : f.lucro12m ?? null;
+  if (l12 != null || q.preco != null) pts.push({ rot: 'Atual', lucro: l12, preco: q.preco ?? h.preco ?? null });
   $('lucroCard').innerHTML = `<div class="card"><h2>Lucro × Cotação</h2>
     <div class="linha" style="gap:16px;font-size:12px;margin:4px 0"><span><span class="bola" style="display:inline-block;width:9px;height:9px;background:#2E8B6A"></span> Lucro líquido</span>
       <span><span class="bola" style="display:inline-block;width:9px;height:9px;background:#A08A5E"></span> Cotação</span></div>
@@ -2183,18 +2185,26 @@ function desenharLucro(pts) {
   const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
   const padL = 48, padR = 40, padT = 10, padB = 22, n = pts.length;
   const ls = pts.map(p => p.lucro).filter(v => v != null), ps = pts.map(p => p.preco).filter(v => v != null);
-  const loL = Math.min(0, ...ls), hiL = Math.max(...ls, 1) * 1.1;
-  const loP = Math.min(...ps) * 0.9, hiP = Math.max(...ps) * 1.08;
+  // escalas com números redondos (0, 5B, 10B… / 10, 15, 20…), como no Status Invest
+  const escala = (lo, hi) => {
+    const bruto = (hi - lo) / 5 || 1, ex = Math.pow(10, Math.floor(Math.log10(bruto))), f = bruto / ex;
+    const passo = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * ex;
+    return { lo: Math.floor(lo / passo) * passo, hi: Math.ceil(hi / passo) * passo, passo };
+  };
+  const eL = escala(Math.min(0, ...ls), Math.max(...ls, 1)), eP = escala(Math.min(...ps), Math.max(...ps));
+  const loL = eL.lo, hiL = eL.hi, loP = eP.lo, hiP = eP.hi;
   const X = i => padL + (W - padL - padR) * (n === 1 ? 0.5 : i / (n - 1));
   const YL = v => padT + (H - padT - padB) * (1 - (v - loL) / (hiL - loL));
   const YP = v => padT + (H - padT - padB) * (1 - (v - loP) / (hiP - loP));
   const abrevB = v => Math.abs(v) >= 1e9 ? num(v / 1e9, Math.abs(v) >= 1e10 ? 0 : 1) + 'B' : Math.abs(v) >= 1e6 ? num(v / 1e6, 0) + 'M' : num(v, 0);
   g.font = '10.5px system-ui, sans-serif'; g.textBaseline = 'middle';
-  for (let k = 0; k <= 4; k++) {
-    const y = padT + (H - padT - padB) * k / 4;
+  for (let v = loL; v <= hiL + eL.passo / 2; v += eL.passo) {
+    const y = YL(v);
     g.strokeStyle = C('grade'); g.beginPath(); g.moveTo(padL, y); g.lineTo(W - padR, y); g.stroke();
-    g.fillStyle = '#2E8B6A'; g.textAlign = 'right'; g.fillText(abrevB(hiL - (hiL - loL) * k / 4), padL - 6, y);
-    g.fillStyle = '#A08A5E'; g.textAlign = 'left'; g.fillText(num(hiP - (hiP - loP) * k / 4, hiP < 20 ? 1 : 0), W - padR + 6, y);
+    g.fillStyle = '#2E8B6A'; g.textAlign = 'right'; g.fillText(abrevB(v), padL - 6, y);
+  }
+  for (let v = loP; v <= hiP + eP.passo / 2; v += eP.passo) {
+    g.fillStyle = '#A08A5E'; g.textAlign = 'left'; g.fillText(num(v, eP.passo < 1 ? 1 : 0), W - padR + 6, YP(v));
   }
   // linha suave passando pelos pontos
   const curva = (arr, Y, cor) => {
