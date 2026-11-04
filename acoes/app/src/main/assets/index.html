@@ -1896,7 +1896,8 @@ function mapaAcao(t) {
     dy: numF(t['Div. Yield']), pl: numF(t['P/L']), pvp: numF(t['P/VP']), roe: numF(t['ROE']), roic: numF(t['ROIC']),
     lpa: numF(t['LPA']), vpa: numF(t['VPA']), margLiq: numF(t['Marg. Líquida']), divPL: numF(t['Dív Líq/ Patrim']) ?? numF(t['Dív Líq / Patrim']),
     evEbitda: numF(t['EV / EBITDA']), valorMercado: numF(t['Valor de mercado']), liqCorr: numF(t['Liquidez Corr']),
-    cresRec: numF(t['Cres. Rec (5a)']), min52: numF(t['Min 52 sem']), max52: numF(t['Max 52 sem'])
+    cresRec: numF(t['Cres. Rec (5a)']), min52: numF(t['Min 52 sem']), max52: numF(t['Max 52 sem']),
+    lucro12m: numF(t['Lucro Líquido'])   // primeira ocorrência = últimos 12 meses
   };
 }
 function mapaFII(t) {
@@ -2076,8 +2077,118 @@ async function cardIndicadores(sym) {
     <div class="grade-ind">${ks.filter(k => d[k] != null).map(k => `<div class="ind ${comHist.includes(k) ? 'clic' : ''}" ${comHist.includes(k) ? `onclick="abrirHistorico('${esc(sym)}','${k}')"` : ''}>
       <span class="sub">${ROT_IND[k]}${comHist.includes(k) ? ' <span style="color:var(--ouro)">📈</span>' : ''}</span><b>${fmtInd(k, d[k])}</b></div>`).join('')}</div>
     <div class="sub" style="font-size:11px;margin-top:8px">Toque em D.Y, P/L ou P/VP para ver o histórico.</div></div>
+    ${d.tipo !== 'fii' ? '<div id="lucroCard"></div>' : ''}
     <div id="provCard"></div>`;
   cardProventos(sym);
+  if (d.tipo !== 'fii') cardLucro(sym, false);
+}
+
+/* --- Lucro × Cotação (lucro anual pela Bolsai, cotação de fim de ano pelo Yahoo) --- */
+let lucroHist = ler('lucroHist', {});   // { sym: { ano: lucro em R$ | null } } — anos fechados não mudam
+async function lucroAnual(sym, aoProgresso) {
+  const T = rot(sym), h = lucroHist[sym] = lucroHist[sym] || {};
+  const anoAtual = new Date().getFullYear();
+  let falhas = 0, erro = null;
+  for (let y = anoAtual - 1; y >= anoAtual - 12; y--) {
+    if (y in h) { if (h[y] == null) falhas++; else falhas = 0; if (falhas >= 2) break; continue; }
+    try {
+      const j = await bolsai(`fundamentals/${T}?reference_date=${y}-12-31`);
+      const ref = String(j.reference_date || '');
+      if (!ref.startsWith(String(y))) { h[y] = null; falhas++; }
+      else {
+        // lucro anual = valor de mercado ÷ P/L (evita dúvida sobre a unidade do campo net_income)
+        const l = j.market_cap && j.pl ? j.market_cap / j.pl : j.net_income != null ? j.net_income * 1000 : null;
+        h[y] = l; falhas = l == null ? falhas + 1 : 0;
+      }
+    } catch (e) {
+      erro = e;
+      if (/429/.test(e.message)) break;          // limite diário da Bolsai
+      if (/40[13]/.test(e.message)) break;       // chave inválida ou recurso só no plano Pro
+      falhas++;
+    }
+    aoProgresso && aoProgresso(anoAtual - y);
+    if (falhas >= 2) break;                      // empresa ainda não existia / sem dados antigos
+  }
+  gravar('lucroHist', lucroHist);
+  const anos = Object.keys(h).map(Number).filter(y => h[y] != null).sort((a, b) => a - b);
+  if (!anos.length && erro) throw erro;
+  return anos.map(y => ({ ano: y, lucro: h[y] }));
+}
+async function cardLucro(sym, carregar) {
+  const el = $('lucroCard'); if (!el) return;
+  const temCache = lucroHist[sym] && Object.values(lucroHist[sym]).some(v => v != null);
+  if (!chaveBolsai()) {
+    el.innerHTML = `<div class="card"><h2>Lucro × Cotação</h2><div class="sub">Precisa da chave grátis da Bolsai: cole em Indicadores › Fontes de dados.</div></div>`;
+    return;
+  }
+  if (!carregar && !temCache) {
+    el.innerHTML = `<div class="card"><div class="linha"><h2 style="flex:1;margin:0">Lucro × Cotação</h2>
+      <button class="btn sec peq" onclick="cardLucro('${esc(sym)}', true)">Carregar</button></div>
+      <div class="sub" style="font-size:12px;margin-top:6px">Usa até 12 consultas da Bolsai na primeira vez (o plano grátis tem 200 por dia). Depois fica guardado.</div></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="card"><h2>Lucro × Cotação</h2><div class="sub" id="lucroProg">Carregando…</div></div>`;
+  let lucros, h;
+  try {
+    [lucros, h] = await Promise.all([
+      lucroAnual(sym, n => { const p = $('lucroProg'); if (p) p.textContent = `Carregando… ${n} de até 12 anos`; }),
+      buscarHistorico(sym, 'm')
+    ]);
+  } catch (e) {
+    if (!$('lucroCard') || atual !== sym) return;
+    const msg = /429/.test(e.message) ? 'limite diário da Bolsai atingido; tente amanhã' : /40[13]/.test(e.message) ? 'a Bolsai recusou (chave inválida ou consulta por data só no plano Pro)' : e.message;
+    $('lucroCard').innerHTML = `<div class="card"><h2>Lucro × Cotação</h2><div class="sub">Não consegui carregar: ${esc(String(msg)).slice(0, 140)}</div></div>`;
+    return;
+  }
+  if (!$('lucroCard') || atual !== sym) return;
+  // cotação no fim de cada ano (último candle mensal do ano) e atual
+  const fech = {}; (h.m || []).forEach(p => { fech[new Date(p.t * 1000).getUTCFullYear()] = p.c; });
+  const pts = lucros.map(x => ({ rot: String(x.ano), lucro: x.lucro, preco: fech[x.ano] ?? null }));
+  const f = fundMem[sym] || (fundCache[sym] || {}).d || {};
+  const q = cotacoes[sym] || {};
+  if (f.lucro12m != null || q.preco != null) pts.push({ rot: 'Atual', lucro: f.lucro12m != null ? f.lucro12m : null, preco: q.preco ?? h.preco ?? null });
+  $('lucroCard').innerHTML = `<div class="card"><h2>Lucro × Cotação</h2>
+    <div class="linha" style="gap:16px;font-size:12px;margin:4px 0"><span><span class="bola" style="display:inline-block;width:9px;height:9px;background:#2E8B6A"></span> Lucro líquido</span>
+      <span><span class="bola" style="display:inline-block;width:9px;height:9px;background:#A08A5E"></span> Cotação</span></div>
+    <div class="grafico" style="height:260px"><canvas id="cvLucro"></canvas></div>
+    <div class="sub" style="font-size:11px;margin-top:4px">Lucro anual: Bolsai (valor de mercado ÷ P/L em 31/12). “Atual” = últimos 12 meses (Fundamentus). Cotação de fim de ano ajustada por desdobramentos.</div></div>`;
+  desenharLucro(pts);
+}
+function desenharLucro(pts) {
+  const cv = $('cvLucro'); if (!cv || !pts.length) return;
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  const padL = 48, padR = 40, padT = 10, padB = 22, n = pts.length;
+  const ls = pts.map(p => p.lucro).filter(v => v != null), ps = pts.map(p => p.preco).filter(v => v != null);
+  const loL = Math.min(0, ...ls), hiL = Math.max(...ls, 1) * 1.1;
+  const loP = Math.min(...ps) * 0.9, hiP = Math.max(...ps) * 1.08;
+  const X = i => padL + (W - padL - padR) * (n === 1 ? 0.5 : i / (n - 1));
+  const YL = v => padT + (H - padT - padB) * (1 - (v - loL) / (hiL - loL));
+  const YP = v => padT + (H - padT - padB) * (1 - (v - loP) / (hiP - loP));
+  const abrevB = v => Math.abs(v) >= 1e9 ? num(v / 1e9, Math.abs(v) >= 1e10 ? 0 : 1) + 'B' : Math.abs(v) >= 1e6 ? num(v / 1e6, 0) + 'M' : num(v, 0);
+  g.font = '10.5px system-ui, sans-serif'; g.textBaseline = 'middle';
+  for (let k = 0; k <= 4; k++) {
+    const y = padT + (H - padT - padB) * k / 4;
+    g.strokeStyle = C('grade'); g.beginPath(); g.moveTo(padL, y); g.lineTo(W - padR, y); g.stroke();
+    g.fillStyle = '#2E8B6A'; g.textAlign = 'right'; g.fillText(abrevB(hiL - (hiL - loL) * k / 4), padL - 6, y);
+    g.fillStyle = '#A08A5E'; g.textAlign = 'left'; g.fillText(num(hiP - (hiP - loP) * k / 4, hiP < 20 ? 1 : 0), W - padR + 6, y);
+  }
+  // linha suave passando pelos pontos
+  const curva = (arr, Y, cor) => {
+    const p = arr.map((v, i) => v == null ? null : [X(i), Y(v)]).filter(Boolean);
+    if (!p.length) return;
+    g.strokeStyle = cor; g.lineWidth = 2.2; g.beginPath(); g.moveTo(p[0][0], p[0][1]);
+    for (let i = 1; i < p.length; i++) { const [x0, y0] = p[i - 1], [x1, y1] = p[i], cx = (x0 + x1) / 2; g.bezierCurveTo(cx, y0, cx, y1, x1, y1); }
+    g.stroke();
+    p.forEach(([x, y]) => { g.fillStyle = C('card'); g.beginPath(); g.arc(x, y, 3.5, 0, 7); g.fill(); g.strokeStyle = cor; g.lineWidth = 1.5; g.stroke(); });
+  };
+  curva(pts.map(p => p.lucro), YL, '#2E8B6A');
+  curva(pts.map(p => p.preco), YP, '#A08A5E');
+  g.fillStyle = C('eixo'); g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  const passo = Math.max(1, Math.ceil(n / 7));
+  pts.forEach((p, i) => { if (i % passo === 0 || i === n - 1) g.fillText(p.rot, X(i), H - 4); });
+  g.textAlign = 'left';
 }
 async function cardProventos(sym) {
   let r;
@@ -2424,7 +2535,7 @@ function simFund(url) {
   }
   if (/11$/.test(T) && T !== 'TAEE11') return '<html>Nenhum papel encontrado</html>';
   const cel = (l, v) => `<td class="label"><span class="help tips">?</span><span class="txt">${l}</span></td><td class="data"><span class="txt">${v}</span></td>`;
-  return `<table><tr>${cel('Empresa', 'EMPRESA ' + T)}${cel('Setor', 'Energia Elétrica')}</tr><tr>${cel('Subsetor', 'Energia')}${cel('Valor de mercado', '24.123.000.000')}</tr>
+  return `<table><tr>${cel('Lucro Líquido', '133.376.000.000')}${cel('Empresa', 'EMPRESA ' + T)}${cel('Setor', 'Energia Elétrica')}</tr><tr>${cel('Subsetor', 'Energia')}${cel('Valor de mercado', '24.123.000.000')}</tr>
     <tr>${cel('P/L', '5,09')}${cel('LPA', '10,35')}</tr><tr>${cel('P/VP', '1,41')}${cel('VPA', '37,32')}</tr><tr>${cel('Div. Yield', '6,9%')}${cel('ROE', '27,7%')}</tr>
     <tr>${cel('EV / EBITDA', '3,08')}${cel('Marg. Líquida', '24,4%')}</tr><tr>${cel('Dív Líq / Patrim', '0,65')}${cel('ROIC', '19,7%')}</tr><tr>${cel('Liquidez Corr', '0,85')}</tr></table>`;
 }
@@ -2441,6 +2552,7 @@ function simulacao() {
   }
   return {
     fetch(url, id) {
+      if (/usebolsai.*reference_date=(\d{4})/.test(url)) { const y = +url.match(/reference_date=(\d{4})/)[1]; return setTimeout(() => window.__cb(id, true, y < 2014 ? JSON.stringify({ reference_date: '2026-06-30' }) : JSON.stringify({ reference_date: y + '-12-31', market_cap: 1e11 * (1 + (y % 5) / 10), pl: 6 + (y % 4) })), 60); }
       if (/fundamentus|usebolsai/.test(url)) return setTimeout(() => window.__cb(id, true, simFund(url)), 150);
       if (/api\.bcb\.gov\.br/.test(url)) return setTimeout(() => { const l = []; for (let k = 800; k >= 0; k--) { const d = new Date(Date.now() - k * 864e5); if (d.getDay() % 6) l.push({ data: d.toLocaleDateString('pt-BR'), valor: '0.0548' }); } window.__cb(id, true, JSON.stringify(l)); }, 150);
       setTimeout(() => {
