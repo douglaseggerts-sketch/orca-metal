@@ -2077,10 +2077,11 @@ async function cardIndicadores(sym) {
     <div class="grade-ind">${ks.filter(k => d[k] != null).map(k => `<div class="ind ${comHist.includes(k) ? 'clic' : ''}" ${comHist.includes(k) ? `onclick="abrirHistorico('${esc(sym)}','${k}')"` : ''}>
       <span class="sub">${ROT_IND[k]}${comHist.includes(k) ? ' <span style="color:var(--ouro)">📈</span>' : ''}</span><b>${fmtInd(k, d[k])}</b></div>`).join('')}</div>
     <div class="sub" style="font-size:11px;margin-top:8px">Toque em D.Y, P/L ou P/VP para ver o histórico.</div></div>
-    ${d.tipo !== 'fii' ? '<div id="lucroCard"></div>' : ''}
+    ${d.tipo !== 'fii' && listaDe(sym) !== '_sem' ? '<div id="lucroCard"></div>' : ''}
     <div id="provCard"></div>`;
   cardProventos(sym);
-  if (d.tipo !== 'fii') cardLucro(sym, false);
+  // só para ações das suas listas (economiza consultas da Bolsai); carrega sozinho
+  if (d.tipo !== 'fii' && listaDe(sym) !== '_sem') cardLucro(sym, true);
 }
 
 /* --- Lucro × Cotação (lucro anual pela Bolsai, cotação de fim de ano pelo Yahoo) --- */
