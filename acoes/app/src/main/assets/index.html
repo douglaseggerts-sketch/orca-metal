@@ -1073,10 +1073,10 @@ function telaMedias() {
       </div></div>
     <div style="text-align:center;margin-bottom:12px"><button class="btn sec peq" onclick="restaurarPadrao()">Voltar ao padrão (MM 9, 21, 50, 80 e IFR 9)</button></div>
     <div class="card"><h2>Fontes de dados</h2>
-      <div class="sub" style="margin-bottom:10px">Cotações: Yahoo Finance. Indicadores e proventos de ações: Fundamentus. FIIs e histórico trimestral de P/L e P/VP: Bolsai (cole sua chave; grátis dá os FIIs, o plano Pro dá o histórico).</div>
+      <div class="sub" style="margin-bottom:10px">Cotações: Yahoo Finance. Indicadores e proventos de ações: Fundamentus. FIIs, histórico anual de P/L e P/VP e Lucro × Cotação: Bolsai (cole sua chave grátis; com a sincronização ligada, ela vai sozinha para o outro aparelho).</div>
       <div class="form"><input id="bKey" type="password" placeholder="Chave da Bolsai (sk_…)" value="${esc(B.load('bolsaiChave') || '')}" autocomplete="off">
         <div class="linha"><button class="btn" style="flex:1" onclick="salvarBolsai()">Salvar e testar</button></div>
-        <div class="sub" id="bStatus">${chaveBolsai() ? 'Chave salva neste aparelho.' : 'Sem chave: FIIs ficam só com DY dos proventos.'}</div></div></div>
+        <div class="sub" id="bStatus">${chaveBolsai() ? (syncConfig() ? 'Chave salva. Vai para o outro aparelho na próxima sincronização.' : 'Chave salva neste aparelho. Ligue a sincronização abaixo para ela ir para o outro aparelho.') : 'Sem chave: FIIs ficam só com DY dos proventos.'}</div></div></div>
     <div class="card"><h2>Sincronizar celular e PC</h2>
       <div class="sub" style="margin-bottom:10px">Pela sua Planilha Google: ações, carteira, listas, médias e alertas ficam iguais nos dois, e a planilha ganha a aba “Carteira (app)”.</div>
       <div class="form">
@@ -1095,6 +1095,7 @@ async function salvarBolsai() {
   Object.keys(fundMem).forEach(x => delete fundMem[x]); fundCache = {}; gravar('fundCache', fundCache);
   if (!k) { $('bStatus').textContent = 'Chave removida.'; return; }
   $('bStatus').textContent = 'Testando…';
+  if (syncConfig()) sincronizarAgora(true);   // leva a chave para o outro aparelho
   try { const j = await bolsai('fiis/HGLG11'); $('bStatus').innerHTML = '<span class="alta">Chave funcionando</span> (HGLG11: P/VP ' + num(j.pvp) + ').'; }
   catch (e) { $('bStatus').innerHTML = '<span class="baixa">Não funcionou:</span> ' + esc(e.message).slice(0, 120); }
 }

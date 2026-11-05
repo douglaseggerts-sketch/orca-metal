@@ -20,7 +20,7 @@ final class Store {
 
     private static final String ARQUIVO = "dados";
     static final Set<String> SINCRONIZADAS = new HashSet<>(Arrays.asList(
-            "lista", "medias", "ifr", "carteira", "alertas", "alertasExcluidos", "fundHist"));
+            "lista", "medias", "ifr", "carteira", "alertas", "alertasExcluidos", "fundHist", "bolsaiChave"));
 
     private Store() {
     }

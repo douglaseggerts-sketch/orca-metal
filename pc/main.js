@@ -26,7 +26,8 @@ function gravarArquivo() {
   } catch (e) { console.error(e); }
 }
 // chaves que vão para a planilha; cada uma guarda a hora da última alteração em _t
-const SINCRONIZADAS = ['lista', 'medias', 'ifr', 'carteira', 'alertas', 'alertasExcluidos', 'fundHist'];
+const SINCRONIZADAS = ['lista', 'medias', 'ifr', 'carteira', 'alertas', 'alertasExcluidos', 'fundHist', 'bolsaiChave'];
+const vazioChave = (k, v) => k === 'bolsaiChave' && !String(v || '').trim();   // chave vazia não apaga a do outro aparelho
 const store = {
   get: (k) => (carregar()[k] != null ? String(carregar()[k]) : ''),
   tem: (k) => carregar()[k] != null,
@@ -55,7 +56,7 @@ async function sincronizar() {
     if (!url || !chave) return 'Sincronização não configurada.';
     if (!url.startsWith('https://script.google.com/')) throw new Error('O endereço deve começar com https://script.google.com/');
     const dados = {};
-    SINCRONIZADAS.forEach(k => { if (store.tem(k)) dados[k] = { v: store.get(k), t: store.tempo(k) }; });
+    SINCRONIZADAS.forEach(k => { if (store.tem(k) && !vazioChave(k, store.get(k))) dados[k] = { v: store.get(k), t: store.tempo(k) }; });
     const r = await net.fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ chave, dados, aparelho: 'pc' }) });
     const txt = await r.text();
@@ -63,7 +64,7 @@ async function sincronizar() {
     if (!j.ok) throw new Error(j.erro || 'a planilha recusou a sincronização');
     let recebidos = 0;
     for (const [k, o] of Object.entries(j.dados || {})) {
-      if (!SINCRONIZADAS.includes(k) || o == null || o.v == null) continue;
+      if (!SINCRONIZADAS.includes(k) || o == null || o.v == null || vazioChave(k, o.v)) continue;
       if (o.v !== (store.tem(k) ? store.get(k) : null) && (o.t || 0) >= store.tempo(k)) { store.put(k, o.v, o.t || 0); recebidos++; }
     }
     store.put('ultimaSync', String(Date.now()));
