@@ -83,6 +83,38 @@ final class Http {
         }
     }
 
+    /** POST de JSON com cabeçalhos extras (ex.: API da Pluggy). Lança exceção com a resposta em caso de erro. */
+    static String postJson(String url, String corpo, JSONObject cabecalhos) throws IOException {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        try {
+            c.setConnectTimeout(20000);
+            c.setReadTimeout(40000);
+            c.setDoOutput(true);
+            c.setRequestMethod("POST");
+            c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            c.setRequestProperty("Accept", "application/json");
+            if (cabecalhos != null) {
+                Iterator<String> it = cabecalhos.keys();
+                while (it.hasNext()) {
+                    String k = it.next();
+                    c.setRequestProperty(k, cabecalhos.optString(k));
+                }
+            }
+            byte[] b = corpo.getBytes(StandardCharsets.UTF_8);
+            c.setFixedLengthStreamingMode(b.length);
+            c.getOutputStream().write(b);
+            int code = c.getResponseCode();
+            InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+            String r = ler(in);
+            if (code >= 400) {
+                throw new IOException("HTTP " + code + (r.isEmpty() ? "" : ": " + r));
+            }
+            return r;
+        } finally {
+            c.disconnect();
+        }
+    }
+
     private static Charset charset(String tipo) {
         if (tipo != null) {
             for (String p : tipo.split(";")) {

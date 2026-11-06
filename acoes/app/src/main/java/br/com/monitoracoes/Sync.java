@@ -33,7 +33,7 @@ final class Sync {
         JSONObject dados = new JSONObject();
         for (String k : Store.SINCRONIZADAS) {
             String v = Store.get(c, k, null);
-            if (v == null || ("bolsaiChave".equals(k) && v.trim().isEmpty())) {
+            if (v == null || (Store.CHAVES_ACESSO.contains(k) && v.trim().isEmpty())) {
                 continue;   // chave vazia não apaga a do outro aparelho
             }
             dados.put(k, new JSONObject().put("v", v).put("t", Store.tempo(c, k)));
@@ -65,7 +65,7 @@ final class Sync {
                     continue;
                 }
                 String v = o.optString("v", null);
-                if ("bolsaiChave".equals(k) && (v == null || v.trim().isEmpty())) {
+                if (Store.CHAVES_ACESSO.contains(k) && (v == null || v.trim().isEmpty())) {
                     continue;
                 }
                 long t = o.optLong("t", 0);

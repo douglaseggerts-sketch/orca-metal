@@ -1077,6 +1077,13 @@ function telaMedias() {
       <div class="form"><input id="bKey" type="password" placeholder="Chave da Bolsai (sk_…)" value="${esc(B.load('bolsaiChave') || '')}" autocomplete="off">
         <div class="linha"><button class="btn" style="flex:1" onclick="salvarBolsai()">Salvar e testar</button></div>
         <div class="sub" id="bStatus">${chaveBolsai() ? (syncConfig() ? 'Chave salva. Vai para o outro aparelho na próxima sincronização.' : 'Chave salva neste aparelho. Ligue a sincronização abaixo para ela ir para o outro aparelho.') : 'Sem chave: FIIs ficam só com DY dos proventos.'}</div></div></div>
+    <div class="card"><h2>Corretoras (Open Finance)</h2>
+      <div class="sub" style="margin-bottom:10px">Atualiza a carteira direto das corretoras e bancos (BTG, Clear, Rico, XP, Itaú, Nubank…) pelo Meu Pluggy, grátis para uso pessoal. Veja o passo a passo no guia do app.</div>
+      <div class="form"><input id="pgId" placeholder="Client ID" value="${esc(B.load('pluggyId') || '')}" autocomplete="off">
+        <input id="pgSecret" type="password" placeholder="Client Secret" value="${esc(B.load('pluggySecret') || '')}" autocomplete="off">
+        <textarea id="pgItens" rows="3" placeholder="Item IDs (um por corretora; pode colar um por linha)" style="width:100%;box-sizing:border-box;font:inherit;padding:10px;border-radius:10px;border:1px solid var(--borda);background:var(--campo,var(--card));color:var(--texto)">${esc(B.load('pluggyItens') || '')}</textarea>
+        <div class="linha"><button class="btn" style="flex:1" onclick="salvarPluggy()">Salvar e testar</button></div>
+        <div class="sub" id="pgStatus">${pluggyConfig() ? itensPluggy().length + ' corretora(s) configurada(s). Use Carteira › Atualizar das corretoras.' : (B.postCom ? 'Não configurado.' : 'Atualize o app para usar.')}</div></div></div>
     <div class="card"><h2>Sincronizar celular e PC</h2>
       <div class="sub" style="margin-bottom:10px">Pela sua Planilha Google: ações, carteira, listas, médias e alertas ficam iguais nos dois, e a planilha ganha a aba “Carteira (app)”.</div>
       <div class="form">
@@ -1206,6 +1213,7 @@ function telaCarteira() {
       return `<div class="sub" style="margin-top:4px">Aportado ${dinheiro(ap)} · <b class="${l >= 0 ? 'alta' : 'baixa'}">${l >= 0 ? 'Lucro' : 'Prejuízo'} ${dinheiro(Math.abs(l))} (${pct(l / ap * 100)})</b></div>`; })()}
     <div class="linha" style="margin-top:12px;flex-wrap:wrap">
       <button class="btn peq" onclick="formItem()">+ Ativo</button>
+      ${pluggyConfig() ? '<button class="btn sec peq" id="btPluggy" onclick="atualizarCorretoras()">Atualizar das corretoras</button>' : ''}
       <button class="btn sec peq" onclick="importarB3()">Importar da B3</button>
       <button class="btn sec peq" onclick="editarListas()">Listas e metas</button>
     </div>
@@ -1868,6 +1876,109 @@ function aplicarImportacao(planilhas) {
   if (temMov) r += `<br><span class="sub">O extrato de Movimentação cobre só o período escolhido na B3. Para conferir as quantidades totais, importe também o Excel de <b>Extratos › Posição</b>.${movIgnoradas ? ' Linhas de CDB, Tesouro e outros eventos foram ignoradas.' : ''}</span>`;
   if (fora.length) r += `<br><span class="sub">Não estão mais na posição da B3: ${fora.join(', ')}. Se vendeu, exclua da carteira.</span>`;
   return r || 'Nada mudou.';
+}
+
+/* ===================== Corretoras: Open Finance pelo Meu Pluggy ===================== */
+const PLUGGY = 'https://api.pluggy.ai/';
+const itensPluggy = () => [...new Set(String(B.load('pluggyItens') || '').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) || [])];
+const pluggyConfig = () => !!(B.postCom && (B.load('pluggyId') || '').trim() && (B.load('pluggySecret') || '').trim() && itensPluggy().length);
+function erroPluggy(e) {
+  const m = String((e && e.message) || e);
+  if (/HTTP 40[13]/.test(m) && /auth|client/i.test(m)) return 'Client ID ou Client Secret incorretos';
+  if (/HTTP 404/.test(m)) return 'Item ID não encontrado (confira se copiou o id do item da aplicação certa)';
+  if (/USER_AUTHORIZATION_EXPIRED|consent/i.test(m)) return 'a autorização do Meu Pluggy venceu (dura 1 ano): refaça o "Connect Account" no painel da Pluggy';
+  if (/HTTP 429/.test(m)) return 'muitas consultas seguidas; tente daqui a alguns minutos';
+  return m.slice(0, 160);
+}
+async function pluggyChave() {
+  const r = JSON.parse(await chamar('postCom', PLUGGY + 'auth',
+    JSON.stringify({ clientId: (B.load('pluggyId') || '').trim(), clientSecret: (B.load('pluggySecret') || '').trim() }), ''));
+  if (!r.apiKey) throw new Error('a Pluggy não devolveu a chave de acesso');
+  return r.apiKey;
+}
+async function pluggyGet(chave, caminho) {
+  return JSON.parse(await chamar('fetchCom', PLUGGY + caminho, JSON.stringify({ 'X-API-KEY': chave })));
+}
+async function investimentosPluggy(aoProgresso) {
+  const chave = await pluggyChave(), todos = [], erros = [];
+  const itens = itensPluggy();
+  for (let n = 0; n < itens.length; n++) {
+    const id = itens[n];
+    if (aoProgresso) aoProgresso(n + 1, itens.length);
+    try {
+      let nome = '';
+      try { const it = await pluggyGet(chave, 'items/' + id); nome = (it.connector && it.connector.name) || ''; } catch (e) { }
+      for (let pg = 1, total = 1; pg <= total && pg <= 20; pg++) {
+        const r = await pluggyGet(chave, `investments?itemId=${id}&pageSize=500&page=${pg}`);
+        total = r.totalPages || 1;
+        (r.results || []).forEach(x => todos.push(Object.assign({ _corretora: nome }, x)));
+      }
+    } catch (e) { erros.push((n + 1) + 'ª corretora: ' + erroPluggy(e)); }
+  }
+  if (!todos.length && erros.length) throw new Error(erros.join('; '));
+  return { lista: todos, erros };
+}
+// monta "planilhas" no mesmo formato dos extratos da B3 e reaproveita a importação
+function planilhasDePluggy(lista) {
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  const pos = { 'Acoes': [], 'Fundo Imobiliario': [], 'BDR': [], 'ETF': [] }, neg = {}, rf = [];
+  let ignorados = 0;
+  for (const x of lista) {
+    if (x.status === 'TOTAL_WITHDRAWAL') continue;
+    const st = String(x.subtype || '').toUpperCase(), tp = String(x.type || '').toUpperCase();
+    const renda = tp === 'EQUITY' || tp === 'ETF';
+    if (renda) {
+      let tk = limparTicker(String(x.code || ''));
+      if (!/^[A-Z]{4}\d{1,2}$/.test(tk)) { const m = String(x.name || '').toUpperCase().match(/\b[A-Z]{4}\d{1,2}\b/); tk = m ? m[0] : ''; }
+      const q = +x.quantity;
+      if (!tk || !(q > 0)) { ignorados++; continue; }
+      const aba = tp === 'ETF' ? 'ETF' : st === 'REAL_ESTATE_FUND' ? 'Fundo Imobiliario' : st === 'BDR' ? 'BDR' : 'Acoes';
+      pos[aba].push([tk, q]);
+      if (+x.amountOriginal > 0) (neg[aba] = neg[aba] || []).push([hoje, 'Compra', tk, q, +x.amountOriginal / q]);
+    } else {
+      const v = +(x.balance || x.amount);
+      if (!(v > 0)) { ignorados++; continue; }
+      rf.push([(x.name || x.code || 'Investimento') + (x._corretora ? ' · ' + x._corretora : ''), v]);
+    }
+  }
+  const pl = {};
+  for (const [aba, l] of Object.entries(pos)) if (l.length) pl['Posicao ' + aba] = [['Código de Negociação', 'Quantidade'], ...l];
+  for (const [aba, l] of Object.entries(neg)) pl['Negociacao ' + aba] = [['Data do Negócio', 'Tipo de Movimentação', 'Código de Negociação', 'Quantidade', 'Preço'], ...l];
+  if (rf.length) pl['Renda Fixa'] = [['Produto', 'Valor Atualizado'], ...rf];
+  return { pl, ignorados, nRenda: Object.values(pos).reduce((s, l) => s + l.length, 0), nRf: rf.length };
+}
+async function salvarPluggy() {
+  B.save('pluggyId', $('pgId').value.trim()); B.save('pluggySecret', $('pgSecret').value.trim());
+  B.save('pluggyItens', [...new Set($('pgItens').value.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) || [])].join('\n'));
+  const st = $('pgStatus');
+  if (!pluggyConfig()) { st.textContent = B.postCom ? 'Preencha o Client ID, o Client Secret e pelo menos um Item ID.' : 'Atualize o app para usar.'; return; }
+  if (syncConfig()) sincronizarAgora(true);
+  st.textContent = 'Testando…';
+  try {
+    const r = await investimentosPluggy((n, t) => { st.textContent = `Testando corretora ${n} de ${t}…`; });
+    const p = planilhasDePluggy(r.lista);
+    st.innerHTML = `<span class="alta">Funcionando:</span> ${p.nRenda} ação(ões)/FII(s)/ETF(s) e ${p.nRf} título(s) de renda fixa/fundos encontrados.` +
+      (r.erros.length ? `<br><span class="baixa">${esc(r.erros.join('; '))}</span>` : '') + ' Use Carteira › Atualizar das corretoras.';
+  } catch (e) { st.innerHTML = '<span class="baixa">Não funcionou:</span> ' + esc(erroPluggy(e)); }
+}
+async function atualizarCorretoras() {
+  abrirFolha(`<h2>Atualizar das corretoras</h2><div class="sub" id="pgProg">Conectando à Pluggy…</div>`);
+  try {
+    const r = await investimentosPluggy((n, t) => { const e = $('pgProg'); if (e) e.textContent = `Lendo corretora ${n} de ${t}…`; });
+    const p = planilhasDePluggy(r.lista);
+    if (!Object.keys(p.pl).length) throw new Error('nenhum investimento veio das corretoras. Confira no Meu Pluggy se elas estão conectadas e com investimentos.');
+    const res = aplicarImportacao(p.pl);
+    registrarMes(); salvarCart(); telaCarteira(); atualizarCotacoesCarteira();
+    const datas = r.lista.map(x => x.date).filter(Boolean).sort();
+    abrirFolha(`<h2>Carteira atualizada</h2><div style="line-height:1.6">${res}</div>
+      <div class="sub" style="margin-top:8px">Fonte: Open Finance (Meu Pluggy)${datas.length ? ', posição de ' + String(datas[datas.length - 1]).slice(0, 10).split('-').reverse().join('/') : ''}. O Meu Pluggy atualiza uma vez por dia.
+      Proventos não vêm por aqui: use o extrato de Movimentação/Eventos da B3.${p.ignorados ? ' ' + p.ignorados + ' item(ns) sem código ou valor foram ignorados.' : ''}</div>
+      ${r.erros.length ? `<div class="sub baixa" style="margin-top:8px">${esc(r.erros.join('; '))}</div>` : ''}
+      <button class="btn" style="margin-top:14px;width:100%" onclick="fecharFolha()">OK</button>`);
+  } catch (e) {
+    abrirFolha(`<h2>Não consegui atualizar</h2><div class="sub">${esc(erroPluggy(e))}</div>
+      <button class="btn" style="margin-top:14px;width:100%" onclick="fecharFolha()">OK</button>`);
+  }
 }
 
 /* ===================== Indicadores (Fundamentus + Bolsai) ===================== */

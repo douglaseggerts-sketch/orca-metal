@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('Android', {
   plataforma: () => 'pc',
   fetch: (url) => ipcRenderer.invoke('fetch', url),
   fetchCom: (url, cab) => ipcRenderer.invoke('fetch', url, cab ? JSON.parse(cab) : null),
+  postCom: (url, corpo, cab) => ipcRenderer.invoke('post', url, corpo, cab ? JSON.parse(cab) : null),
   temaSistemaEscuro: () => ipcRenderer.sendSync('temaSistemaEscuro'),
   barras: () => { },
   verificarAgora: () => ipcRenderer.invoke('verificarAgora'),

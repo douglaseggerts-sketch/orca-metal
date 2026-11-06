@@ -51,6 +51,18 @@ public class Bridge {
 
     /** Tema do celular: true = escuro. */
     @JavascriptInterface
+    public void postCom(final String url, final String corpo, final String cabecalhos, final String cbId) {
+        new Thread(() -> {
+            try {
+                JSONObject h = cabecalhos == null || cabecalhos.isEmpty() ? null : new JSONObject(cabecalhos);
+                responder(cbId, true, Http.postJson(url, corpo, h));
+            } catch (Exception e) {
+                responder(cbId, false, String.valueOf(e.getMessage()));
+            }
+        }).start();
+    }
+
+    @JavascriptInterface
     public boolean temaSistemaEscuro() {
         int m = act.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
         return m == android.content.res.Configuration.UI_MODE_NIGHT_YES;

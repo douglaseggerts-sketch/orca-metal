@@ -20,7 +20,10 @@ final class Store {
 
     private static final String ARQUIVO = "dados";
     static final Set<String> SINCRONIZADAS = new HashSet<>(Arrays.asList(
-            "lista", "medias", "ifr", "carteira", "alertas", "alertasExcluidos", "fundHist", "bolsaiChave"));
+            "lista", "medias", "ifr", "carteira", "alertas", "alertasExcluidos", "fundHist", "bolsaiChave", "pluggyId", "pluggySecret", "pluggyItens"));
+    /** Chaves de acesso: vazias não são enviadas nem recebidas (não apagam as do outro aparelho). */
+    static final Set<String> CHAVES_ACESSO = new HashSet<>(Arrays.asList(
+            "bolsaiChave", "pluggyId", "pluggySecret", "pluggyItens"));
 
     private Store() {
     }

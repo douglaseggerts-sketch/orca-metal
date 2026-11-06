@@ -26,8 +26,9 @@ function gravarArquivo() {
   } catch (e) { console.error(e); }
 }
 // chaves que vão para a planilha; cada uma guarda a hora da última alteração em _t
-const SINCRONIZADAS = ['lista', 'medias', 'ifr', 'carteira', 'alertas', 'alertasExcluidos', 'fundHist', 'bolsaiChave'];
-const vazioChave = (k, v) => k === 'bolsaiChave' && !String(v || '').trim();   // chave vazia não apaga a do outro aparelho
+const SINCRONIZADAS = ['lista', 'medias', 'ifr', 'carteira', 'alertas', 'alertasExcluidos', 'fundHist', 'bolsaiChave', 'pluggyId', 'pluggySecret', 'pluggyItens'];
+const CHAVES_ACESSO = ['bolsaiChave', 'pluggyId', 'pluggySecret', 'pluggyItens'];
+const vazioChave = (k, v) => CHAVES_ACESSO.includes(k) && !String(v || '').trim();   // chave vazia não apaga a do outro aparelho
 const store = {
   get: (k) => (carregar()[k] != null ? String(carregar()[k]) : ''),
   tem: (k) => carregar()[k] != null,
@@ -84,7 +85,7 @@ function motivoPlanilha(txt, status) {
 async function tentarSync() { if (syncConfigurado()) { try { await sincronizar(); } catch (e) { } } }
 
 /* ---------- internet (só Yahoo Finance) ---------- */
-const HOSTS = /^https:\/\/(query[12]\.finance\.yahoo\.com|www\.fundamentus\.com\.br|api\.usebolsai\.com|api\.bcb\.gov\.br)\//;
+const HOSTS = /^https:\/\/(query[12]\.finance\.yahoo\.com|www\.fundamentus\.com\.br|api\.usebolsai\.com|api\.bcb\.gov\.br|api\.pluggy\.ai)\//;
 async function baixarTexto(url, cabecalhos) {
   if (!HOSTS.test(url)) throw new Error('endereço não permitido');
   const r = await net.fetch(url, {
@@ -96,6 +97,16 @@ async function baixarTexto(url, cabecalhos) {
   try { t = new TextDecoder((m ? m[1] : 'utf-8').trim().replace(/"/g, '')).decode(await r.arrayBuffer()); }
   catch (e) { t = await r.text(); }
   if (!r.ok) throw new Error('HTTP ' + r.status);
+  return t;
+}
+
+// POST de JSON (API da Pluggy)
+async function enviarJson(url, corpo, cabecalhos) {
+  if (!HOSTS.test(url)) throw new Error('endereço não permitido');
+  const r = await net.fetch(url, { method: 'POST', body: corpo,
+    headers: Object.assign({ 'Content-Type': 'application/json', Accept: 'application/json' }, cabecalhos || {}) });
+  const t = await r.text();
+  if (!r.ok) throw new Error('HTTP ' + r.status + (t ? ': ' + t : ''));
   return t;
 }
 
@@ -122,6 +133,7 @@ async function verificar() {
 
 /* ---------- ponte com a tela ---------- */
 ipcMain.handle('fetch', (e, url, cab) => baixarTexto(url, cab));
+ipcMain.handle('post', (e, url, corpo, cab) => enviarJson(url, corpo, cab));
 ipcMain.on('temaSistemaEscuro', (e) => { e.returnValue = nativeTheme.shouldUseDarkColors; });
 ipcMain.handle('verificarAgora', () => verificar());
 ipcMain.handle('sincronizar', () => sincronizar());
