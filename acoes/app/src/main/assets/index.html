@@ -1217,7 +1217,7 @@ function telaCarteira() {
       <button class="btn sec peq" onclick="importarB3()">Importar da B3</button>
       <button class="btn sec peq" onclick="editarListas()">Listas e metas</button>
     </div>
-    <input type="file" id="arqB3" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" style="display:none" onchange="lerArquivoB3(this)"></div>`;
+    <input type="file" id="arqB3" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" multiple style="display:none" onchange="lerArquivoB3(this)"></div>`;
 
 
   // distribuição × meta: barras verticais (atual colorida, meta cinza) + tabela compacta
@@ -1606,13 +1606,20 @@ function importarB3() {
       <button class="btn sec" onclick="fecharFolha()">Cancelar</button></div>`);
 }
 async function lerArquivoB3(inp) {
-  const f = inp.files && inp.files[0]; inp.value = '';
-  if (!f) return;
+  const fs = [...(inp.files || [])]; inp.value = '';
+  if (!fs.length) return;
   try {
-    const buf = new Uint8Array(await f.arrayBuffer());
-    const planilhas = /\.csv$/i.test(f.name) ? { CSV: lerCSV(new TextDecoder('utf-8').decode(buf)) } : await lerXLSX(buf);
+    // pode escolher vários extratos de uma vez (ex.: Negociação + Movimentação)
+    const planilhas = {};
+    for (const f of fs) {
+      const buf = new Uint8Array(await f.arrayBuffer());
+      const p = /\.csv$/i.test(f.name) ? { CSV: lerCSV(new TextDecoder('utf-8').decode(buf)) } : await lerXLSX(buf);
+      // o nome da aba indica o tipo (Ações, Fundo Imobiliário…); o nome do arquivo não entra nisso
+      for (const [k, v] of Object.entries(p)) { let n = k, i = 2; while (planilhas[n]) n = k + ' ' + i++; planilhas[n] = v; }
+    }
     const r = aplicarImportacao(planilhas);
     registrarMes(); salvarCart(); fecharFolha(); telaCarteira(); atualizarCotacoesCarteira();
+    if (importPend.length) { telaPendentes(r); return; }
     abrirFolha(`<h2>Importação concluída</h2><div style="line-height:1.6">${r}</div>
       <button class="btn" style="margin-top:14px;width:100%" onclick="fecharFolha()">OK</button>`);
   } catch (e) {
@@ -1724,8 +1731,11 @@ function catPorTipo(tp) {
 }
 const limparTicker = t => String(t).toUpperCase().replace(/\s/g, '').replace(/F$/, '');
 
-function aplicarImportacao(planilhas) {
-  const pos = {}, neg = {}, manuais = [], mov = {};
+const isoDeNum = n => n > 0 ? new Date((n - 25569) * 864e5).toISOString().slice(0, 10) : '';
+let importPend = [];   // compras/vendas dos extratos esperando você confirmar
+function aplicarImportacao(planilhas, opts = {}) {
+  const pos = {}, neg = {}, manuais = [], mov = {}, opsNeg = [], opsMov = [];
+  importPend = [];
   let provRecebidos = 0, movIgnoradas = 0, temMov = false, temEventos = false;
   const aReceber = [];
   const provsExtrato = [];
@@ -1772,6 +1782,7 @@ function aplicarImportacao(planilhas) {
         if (!op || !(q > 0)) { movIgnoradas++; continue; }
         ops.push({ d: dataNum(l[cD]), tk, q, pr: pr > 0 ? pr : 0, op, aba: abaTk, ordem: i });
       }
+      ops.forEach(o => opsMov.push({ f: 'mov', d: isoDeNum(o.d), tk: o.tk, q: o.q, p: o.pr, l: { compra: 'c', venda: 'v', ganho: 'g', perda: 'p' }[o.op], aba: o.aba }));
       // a planilha vem do mais novo para o mais antigo
       ops.sort((a, b) => a.d - b.d || b.ordem - a.ordem).forEach(o => {
         const x = mov[o.tk] = mov[o.tk] || { q: 0, custo: 0, aba: o.aba };
@@ -1791,6 +1802,7 @@ function aplicarImportacao(planilhas) {
         const l = linhas[i], tk = limparTicker(l[cC] || ''); if (!tk) continue;
         const q = numBR(l[cQ]), p = numBR(l[cP]); if (!(q > 0)) continue;
         ops.push({ d: dataNum(l[cD]), tk, q, p, venda: semAcento(l[cT] || '').startsWith('v') });
+        opsNeg.push({ d: isoDeNum(dataNum(l[cD])), tk, q, p, l: semAcento(l[cT] || '').startsWith('v') ? 'v' : 'c' });
       }
       ops.sort((a, b) => a.d - b.d).forEach(o => {
         const x = neg[o.tk] = neg[o.tk] || { q: 0, custo: 0, aba };
@@ -1842,22 +1854,17 @@ function aplicarImportacao(planilhas) {
     else { cart.itens.push({ id: novoId(), cat: catPorTipo(tipoPorTicker(tk, x.aba)), sym: symDe(tk), qtd: x.q, pm: null, b3: true }); novos.push(tk); }
   }
   let comPM = 0;
-  for (const [tk, x] of Object.entries(neg)) {
+  // Corretoras (Open Finance): a posição já é o total, então o preço médio vem pronto
+  if (opts.pmAbsoluto) for (const [tk, x] of Object.entries(neg)) {
     if (!(x.q > 0)) continue;
     let it = acharItem(tk);
     if (!it) { it = { id: novoId(), cat: catPorTipo(tipoPorTicker(tk, x.aba)), sym: symDe(tk), qtd: x.q, b3: true }; cart.itens.push(it); novos.push(tk); }
     it.pm = +(x.custo / x.q).toFixed(4); comPM++;
   }
-  // Movimentação: cria os ativos novos; nos que já existem só ajusta o preço médio se a quantidade bater
-  // (o extrato pode cobrir só parte do histórico)
+  // Extratos de Negociação/Movimentação cobrem só o período escolhido: as compras e vendas
+  // novas entram SOMANDO na carteira, depois que você confirma (e nunca duas vezes)
   const movPM = [], movDif = [];
-  for (const [tk, x] of Object.entries(mov)) {
-    if (!(x.q > 0)) continue;
-    const it = acharItem(tk), pm = x.custo > 0 ? +(x.custo / x.q).toFixed(4) : null;
-    if (!it) { cart.itens.push({ id: novoId(), cat: catPorTipo(tipoPorTicker(tk, x.aba)), sym: symDe(tk), qtd: x.q, pm, b3: true }); novos.push(tk); }
-    else if (Math.abs((+it.qtd || 0) - x.q) < 1e-6) { if (pm) { it.pm = pm; movPM.push(tk); } }
-    else movDif.push(tk);
-  }
+  if (!opts.pmAbsoluto) importPend = operacoesPendentes(opsNeg, opsMov, pos, symDe, acharItem);
   const caixa = manuais.length ? catPorNome(['CAIXA', 'RENDA FIXA'], 'CAIXA') : null;
   manuais.forEach(m => {
     const it = cart.itens.find(i => !i.sym && i.nome === m.nome);
@@ -1873,9 +1880,80 @@ function aplicarImportacao(planilhas) {
   if (temEventos) r += `<b>${aReceber.length}</b> provento(s) a receber, total <b>${dinheiro(aReceber.reduce((s, p) => s + p.v, 0))}</b> (Carteira › A receber e Painel)<br>`;
   if (provRecebidos > 0) r += `Proventos recebidos no período do extrato: <b>${dinheiro(provRecebidos)}</b>${provNovos ? ` (${provNovos} pagamento(s) guardado(s) em Carteira › Proventos recebidos)` : ' (já estavam guardados)'}<br>`;
   if (movDif.length) r += `<br><span class="sub">${movDif.join(', ')}: a quantidade da carteira é diferente da soma do extrato (ele deve cobrir só parte do histórico). Não mexi nesses.</span><br>`;
-  if (temMov) r += `<br><span class="sub">O extrato de Movimentação cobre só o período escolhido na B3. Para conferir as quantidades totais, importe também o Excel de <b>Extratos › Posição</b>.${movIgnoradas ? ' Linhas de CDB, Tesouro e outros eventos foram ignoradas.' : ''}</span>`;
+  if (temMov && movIgnoradas) r += `<br><span class="sub">Linhas de CDB, Tesouro e outros eventos da Movimentação foram ignoradas.</span>`;
   if (fora.length) r += `<br><span class="sub">Não estão mais na posição da B3: ${fora.join(', ')}. Se vendeu, exclua da carteira.</span>`;
-  return r || 'Nada mudou.';
+  return r || (importPend.some(t => t.ops.length) ? '' : 'Nada mudou.');
+}
+
+// compras/vendas dos extratos → o que muda em cada ativo (sem repetir o que já entrou antes)
+function operacoesPendentes(opsNeg, opsMov, pos, symDe, acharItem) {
+  const led = cart.opsB3 || [];
+  const chave = o => [o.f, o.d, o.tk, o.l, +(+o.q).toFixed(6), +(+o.p || 0).toFixed(4)].join('|');
+  const visto = new Set(led.map(chave));
+  const dias = (a, b) => (Date.parse(b) - Date.parse(a)) / 864e5;
+  // Negociação: soma os negócios do mesmo dia (a B3 junta assim na liquidação)
+  const g = {};
+  opsNeg.forEach(o => { const k = [o.d, o.tk, o.l].join('|'); const x = g[k] = g[k] || { d: o.d, tk: o.tk, l: o.l, q: 0, v: 0 }; x.q += o.q; x.v += o.q * o.p; });
+  const negs = Object.values(g).map(x => ({ f: 'neg', d: x.d, tk: x.tk, l: x.l, q: +x.q.toFixed(6), p: x.q ? +(x.v / x.q).toFixed(4) : 0 }));
+  const negTodos = negs.concat(led.filter(o => o.f === 'neg')), movLed = led.filter(o => o.f === 'mov');
+  const casa = (n, m) => n.tk === m.tk && n.l === m.l && Math.abs(n.q - m.q) < 1e-6 && dias(n.d, m.d) >= 0 && dias(n.d, m.d) <= 7;
+  const lote = [];
+  // o mesmo negócio aparece nos dois extratos (Negociação no dia do pregão, Movimentação na liquidação):
+  // vale o da Negociação
+  negs.forEach(o => lote.push(Object.assign({ ja: visto.has(chave(o)) || movLed.some(m => casa(o, m)) }, o)));
+  opsMov.forEach(o => lote.push(Object.assign({ ja: visto.has(chave(o)) || ((o.l === 'c' || o.l === 'v') && negTodos.some(n => casa(n, o))) }, o)));
+  const porTk = {};
+  lote.forEach(o => (porTk[o.tk] = porTk[o.tk] || []).push(o));
+  return Object.entries(porTk).map(([tk, l]) => {
+    l.sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : 0);
+    const it = acharItem(tk), noPos = !!pos[tk];
+    const ops = noPos ? [] : l.filter(o => !o.ja);
+    let q = it ? +it.qtd || 0 : 0, pm = it && it.pm > 0 ? +it.pm : null;
+    const q0 = q, pm0 = pm;
+    ops.forEach(o => {
+      if (o.l === 'c') { if (pm != null || q === 0) pm = ((pm || 0) * q + o.q * o.p) / (q + o.q); q += o.q; }
+      else if (o.l === 'v') q = Math.max(0, q - o.q);
+      else if (o.l === 'g') { if (pm != null && q + o.q > 0) pm = pm * q / (q + o.q); q += o.q; }
+      else { const n = Math.max(0, q - o.q); if (pm != null && n > 0) pm = pm * q / n; q = n; }
+    });
+    const aba = (l.find(o => o.aba) || {}).aba || '';
+    return { tk, sym: it ? it.sym : symDe(tk), novo: !it, aba, ops, todas: l, q0, q1: +q.toFixed(6), pm0, pm1: pm == null ? null : +pm.toFixed(4) };
+  }).filter(t => t.ops.length || t.todas.length).sort((a, b) => a.tk < b.tk ? -1 : 1);
+}
+function telaPendentes(resumo) {
+  const comMud = importPend.filter(t => t.ops.length && !(t.novo && t.q1 <= 0));
+  const fmtQ = v => (+v).toLocaleString('pt-BR', { maximumFractionDigits: 6 });
+  const desc = o => ({ c: 'compra', v: 'venda', g: 'bonificação/desdobro', p: 'grupamento' }[o.l]) + ' ' + fmtQ(o.q) +
+    ' em ' + o.d.split('-').reverse().slice(0, 2).join('/') + (o.l === 'c' || o.l === 'v' ? ' a ' + dinheiro(o.p) : '');
+  const ja = importPend.reduce((s, t) => s + t.todas.filter(o => o.ja).length, 0);
+  abrirFolha(`<h2>Importação</h2>${resumo ? `<div style="line-height:1.6;margin-bottom:10px">${resumo}</div>` : ''}
+    ${comMud.length ? `<div class="sub" style="margin-bottom:8px">Compras e vendas do extrato. Marque as que <b>ainda não estão</b> na carteira; elas serão somadas:</div>
+    ${comMud.map((t, i) => `<label style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--borda)">
+      <input type="checkbox" class="chkPend" data-tk="${esc(t.tk)}" checked style="margin-top:4px;width:18px;height:18px">
+      <div style="flex:1"><b>${esc(t.tk)}</b>${t.novo ? ' <span class="sub">(novo)</span>' : ''}
+        <div class="sub">${t.ops.map(desc).join(' · ')}</div>
+        <div>Qtd ${fmtQ(t.q0)} → <b>${fmtQ(t.q1)}</b>${t.pm1 != null ? ` · PM ${t.pm0 != null ? dinheiro(t.pm0) : '—'} → <b>${dinheiro(t.pm1)}</b>` : ''}</div></div></label>`).join('')}`
+    : '<div class="sub">Nenhuma compra ou venda nova neste extrato.</div>'}
+    ${ja ? `<div class="sub" style="margin-top:8px">${ja} operação(ões) já tinham entrado antes (ou aparecem nos dois extratos) e foram ignoradas.</div>` : ''}
+    <div class="linha" style="margin-top:14px">${comMud.length ? '<button class="btn" style="flex:1" onclick="aplicarPendentes()">Aplicar marcadas</button>' : ''}
+      <button class="btn sec" style="flex:1" onclick="aplicarPendentes(true)">${comMud.length ? 'Não somar nada' : 'OK'}</button></div>`);
+}
+function aplicarPendentes(nenhuma) {
+  const marc = new Set(nenhuma ? [] : [...document.querySelectorAll('.chkPend:checked')].map(c => c.dataset.tk));
+  const novos = [];
+  importPend.forEach(t => {
+    if (!marc.has(t.tk) || !t.ops.length) return;
+    let it = cart.itens.find(i => i.sym === t.sym);
+    if (!it) { if (!(t.q1 > 0)) return; it = { id: novoId(), cat: catPorTipo(tipoPorTicker(t.tk, t.aba)), sym: t.sym, b3: true }; cart.itens.push(it); novos.push(t.tk); }
+    it.qtd = t.q1; if (t.pm1 != null) it.pm = t.pm1; it.b3 = true;
+  });
+  // guarda tudo o que foi visto (marcado ou não), para não oferecer de novo na próxima importação
+  const lote = [];
+  importPend.forEach(t => t.todas.forEach(o => lote.push({ f: o.f, d: o.d, tk: o.tk, l: o.l, q: o.q, p: o.p })));
+  cart.opsB3 = (cart.opsB3 || []).concat(lote).slice(-3000);
+  importPend = [];
+  registrarMes(); salvarCart(); fecharFolha(); telaCarteira(); atualizarCotacoesCarteira();
+  if (marc.size) toast(marc.size + ' ativo(s) atualizado(s)' + (novos.length ? ', ' + novos.length + ' novo(s)' : ''));
 }
 
 /* ===================== Corretoras: Open Finance pelo Meu Pluggy ===================== */
@@ -1967,7 +2045,7 @@ async function atualizarCorretoras() {
     const r = await investimentosPluggy((n, t) => { const e = $('pgProg'); if (e) e.textContent = `Lendo corretora ${n} de ${t}…`; });
     const p = planilhasDePluggy(r.lista);
     if (!Object.keys(p.pl).length) throw new Error('nenhum investimento veio das corretoras. Confira no Meu Pluggy se elas estão conectadas e com investimentos.');
-    const res = aplicarImportacao(p.pl);
+    const res = aplicarImportacao(p.pl, { pmAbsoluto: true });
     registrarMes(); salvarCart(); telaCarteira(); atualizarCotacoesCarteira();
     const datas = r.lista.map(x => x.date).filter(Boolean).sort();
     abrirFolha(`<h2>Carteira atualizada</h2><div style="line-height:1.6">${res}</div>
