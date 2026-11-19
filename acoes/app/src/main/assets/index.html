@@ -317,10 +317,10 @@ const cotacoes = {};   // sym -> {preco, var, nome, moeda}
 const historico = {};  // sym -> {d: pts, w: pts, nome, moeda, preco}
 let view = 'lista', atual = null, periodo = ler('periodo', '5A'), modo = ler('modo', 'candle'), tf = ler('tf', 'w');
 // anos exibidos (null = todo o histórico)
-const PERIODOS = { '3M': 0.25, '6M': 0.5, '1A': 1, '2A': 2, '5A': 5, 'Máx': null };
+const PERIODOS = { '1M': 1 / 12, '3M': 0.25, '6M': 0.5, '1A': 1, '2A': 2, '5A': 5, 'Máx': null };
 if (!(periodo in PERIODOS)) periodo = '5A';
-const nomeTF = t => t === 'm' ? 'mensal' : t === 'w' ? 'semanal' : 'diário';
-const BARRAS_ANO = { d: 252, w: 52, m: 12 };
+const nomeTF = t => t === 'y' ? 'anual' : t === 'm' ? 'mensal' : t === 'w' ? 'semanal' : 'diário';
+const BARRAS_ANO = { d: 252, w: 52, m: 12, y: 1 };
 
 /* ===================== Utilidades ===================== */
 const $ = id => document.getElementById(id);
@@ -446,7 +446,7 @@ function agregar(diarios, f) {
   const out = [];
   let chaveAtual = null, b = null;
   diarios.forEach(p => {
-    const dia = diaDe(p.t), k = f === 'm' ? dia.slice(0, 7) : chaveSemana(dia);
+    const dia = diaDe(p.t), k = f === 'y' ? dia.slice(0, 4) : f === 'm' ? dia.slice(0, 7) : chaveSemana(dia);
     if (k !== chaveAtual) { chaveAtual = k; b = { t: p.t, o: p.o, h: p.h, l: p.l, c: p.c, v: p.v || 0 }; out.push(b); }
     else { b.h = Math.max(b.h, p.h); b.l = Math.min(b.l, p.l); b.c = p.c; b.v += p.v || 0; }
   });
@@ -698,7 +698,7 @@ async function telaDetalhe() {
     <div class="sub" id="dNome">${q ? esc(q.nome) : ''} · ${mercado(s)}</div>
     <div class="periodos">${Object.keys(PERIODOS).map(p => `<button class="${p === periodo ? 'on' : ''}" onclick="mudarPeriodo('${p}')">${p}</button>`).join('')}</div>
     <div class="linha" style="justify-content:space-between">
-      <div class="modo"><button id="tD" class="${tf === 'd' ? 'on' : ''}" onclick="mudarTF('d')">Diário</button><button id="tW" class="${tf === 'w' ? 'on' : ''}" onclick="mudarTF('w')">Semanal</button><button id="tM" class="${tf === 'm' ? 'on' : ''}" onclick="mudarTF('m')">Mensal</button></div>
+      <div class="modo"><button id="tD" class="${tf === 'd' ? 'on' : ''}" onclick="mudarTF('d')">Diário</button><button id="tW" class="${tf === 'w' ? 'on' : ''}" onclick="mudarTF('w')">Semanal</button><button id="tM" class="${tf === 'm' ? 'on' : ''}" onclick="mudarTF('m')">Mensal</button><button id="tY" class="${tf === 'y' ? 'on' : ''}" onclick="mudarTF('y')">Anual</button></div>
       <div class="modo"><button id="mC" class="${modo === 'candle' ? 'on' : ''}" onclick="mudarModo('candle')">Candle</button><button id="mL" class="${modo === 'linha' ? 'on' : ''}" onclick="mudarModo('linha')">Linha</button></div></div>
     <div class="info" id="info"></div>
     <div class="grafico" id="graf"><div class="carregando">Carregando…</div></div>
@@ -749,7 +749,7 @@ async function telaDetalhe() {
 }
 function mudarTF(t) {
   tf = t; gravar('tf', t);
-  $('tD').classList.toggle('on', t === 'd'); $('tW').classList.toggle('on', t === 'w'); $('tM').classList.toggle('on', t === 'm');
+  $('tD').classList.toggle('on', t === 'd'); $('tW').classList.toggle('on', t === 'w'); $('tM').classList.toggle('on', t === 'm'); $('tY').classList.toggle('on', t === 'y');
   desenharDetalhe();
 }
 function mudarPeriodo(p) {
@@ -924,7 +924,7 @@ const grafico = {
       g.beginPath(); g.moveTo(X(i), padT); g.lineTo(X(i), H - padB); g.stroke(); g.setLineDash([]);
       g.fillStyle = C('txt'); g.beginPath(); g.arc(X(i), Y(p.c), 4, 0, 7); g.fill();
     }
-    const rotBarra = f === 'm' ? new Date((p.t - 3 * 3600) * 1000).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit', timeZone: 'UTC' })
+    const rotBarra = f === 'y' ? 'ano de ' + diaDe(p.t).slice(0, 4) : f === 'm' ? new Date((p.t - 3 * 3600) * 1000).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit', timeZone: 'UTC' })
       : f === 'w' ? 'semana de ' + dataBR(p.t) : dataBR(p.t);
     $('info').innerHTML = `<b style="color:var(--txt)">${rotBarra}</b> A ${num(p.o)} M ${num(p.h)} m ${num(p.l)} F <b style="color:${p.c >= p.o ? 'var(--alta)' : 'var(--baixa)'}">${num(p.c)}</b><br>` +
       series.map(s => s.val[i] != null ? `<span style="color:${corLinha(s.m.c)}">${nomeMM(s.m)} ${num(s.val[i])}</span>` : '').join(' ') +
