@@ -13,6 +13,9 @@ const norm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLo
 function exclTerms(){return String(db.settings.excl||'').split('\n').map(norm).filter(Boolean)}
 function isExcl(nome){const n=norm(nome);return exclTerms().some(t=>n.indexOf(t)>=0||t.indexOf(n)>=0&&n.length>3)}
 function socialLink(l){return 'https://www.google.com/search?q='+encodeURIComponent('"'+l.empresa+'" '+(l.cidade||'')+' instagram OR facebook')}
+const HOME=[-26.4234507,-48.7521387];
+function geo(l){return l.gid&&window.LEADS_GEO&&LEADS_GEO[l.gid]||null}
+function dist(l){const g=geo(l);if(!g)return null;const R=6371,r=x=>x*Math.PI/180,a=r(g[0]-HOME[0]),b=r(g[1]-HOME[1]);const h=Math.sin(a/2)**2+Math.cos(r(HOME[0]))*Math.cos(r(g[0]))*Math.sin(b/2)**2;return 2*R*Math.asin(Math.sqrt(h))*1.25}
 function gLink(l){return 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(l.empresa+' '+(l.cidade||'')+' SC')+(l.gid?'&query_place_id='+encodeURIComponent(l.gid):'')}
 function syncLeads(d){
   const seed=window.LEADS_SEED||[],sv=d.seedV||1,maxV=Math.max(1,...seed.map(r=>r[7]||1));
@@ -88,7 +91,7 @@ let db=load();
 function save(){try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){storageOK=false}}
 save();
 
-let lfilter='aprovar',editLead=null,view='prop',curId=null,editIdx=-1,editRec=null,editCat=null,filter='todos',confirmT=null;
+let lsort='perto',lfilter='aprovar',editLead=null,view='prop',curId=null,editIdx=-1,editRec=null,editCat=null,filter='todos',confirmT=null;
 const cur=()=>db.proposals.find(p=>p.id===curId);
 
 /* ---------- auxiliares ---------- */
@@ -267,17 +270,18 @@ function vLeads(){
   else if(lfilter==='hoje')list=L.filter(leadHoje);
   else if(lfilter==='andamento')list=L.filter(l=>ATIVO.indexOf(l.status)>=0||l.status==='aprovado');
   else list=L.filter(l=>l.status!=='descartado'&&l.status!=='excluido');
-  list=list.slice().sort((a,b)=>(a.prox||'9').localeCompare(b.prox||'9'));
+  list=list.slice().sort((a,b)=>{if(lsort==='perto'){const A=dist(a),B=dist(b);return (A==null?1e9:A)-(B==null?1e9:B)}return (a.prox||'9').localeCompare(b.prox||'9')});
   const chip=(k,t)=>`<button class="chip" data-act="lfilter" data-f="${k}" aria-pressed="${lfilter===k}">${t}</button>`;
   const empty={aprovar:'Nenhuma empresa esperando aprovação.',hoje:'Nada para hoje. Aprove empresas em A aprovar.',andamento:'Nenhuma conversa em andamento.',todos:'Nenhuma empresa na lista.'}[lfilter];
   return `<div><h1>Prospecção</h1><p class="sub">Você aprova quem recebe mensagem. Mande umas 3 por dia.</p></div>
   <div class="stats4"><div class="stat"><span>Aprovar</span><b>${nAp}</b></div><div class="stat"><span>Hoje</span><b>${nHo}</b></div><div class="stat"><span>Conversa</span><b>${nCv}</b></div><div class="stat"><span>Clientes</span><b>${nCl}</b></div></div>
+  <div class="sortbar"><span>Ordem:</span><button class="chip sm" data-act="lsort" data-s="perto" aria-pressed="${lsort==='perto'}">Mais perto de casa</button><button class="chip sm" data-act="lsort" data-s="prio" aria-pressed="${lsort==='prio'}">Prioridade</button></div>
   <div class="chips">${chip('aprovar','A aprovar')}${chip('hoje','Hoje')}${chip('andamento','Em andamento')}${chip('todos','Todas')}</div>
   <div class="list">${list.length?list.map(l=>{
     const late=l.prox&&l.prox<today()&&ATIVO.indexOf(l.status)>=0;
     return `<div class="lead${late?' soon':''}">
     <button class="lhead" data-act="lead" data-id="${l.id}"><span class="who">${esc(l.empresa)}</span>
-    <span class="what">${esc(l.cidade)} · ${esc(l.seg)}${l.fone?' · '+esc(fone(l.fone)):' · sem telefone'}</span>
+    <span class="what">${dist(l)!=null?'<b class="km">≈ '+Math.round(dist(l))+' km</b> · ':''}${esc(l.cidade)} · ${esc(l.seg)}${l.fone?' · '+esc(fone(l.fone)):' · sem telefone'}</span>
     ${l.motivo?`<span class="why">${esc(l.motivo)}</span>`:''}</button>
     <div class="glinks"><a class="glink" href="${gLink(l)}" data-act="glink" data-id="${l.id}">Ver no Google ›</a><a class="glink" href="${socialLink(l)}" data-act="slink" data-id="${l.id}">Instagram / Facebook ›</a></div>
     <button class="lhead ltags" data-act="lead" data-id="${l.id}">
@@ -500,6 +504,7 @@ const acts={
     save();toast(n+(n===1?' serviço enviado':' serviços enviados')+' ao Controle');render();
   },
   lfilter(t){lfilter=t.dataset.f;render()},
+  lsort(t){lsort=t.dataset.s;render()},
   slink(t,e){const l=db.leads.find(x=>x.id===t.dataset.id);if(e)e.preventDefault();openExt(socialLink(l))},
   glink(t,e){const l=db.leads.find(x=>x.id===t.dataset.id);if(e)e.preventDefault();openExt(gLink(l))},
   lead(t){leadSheet(t.dataset.id)},

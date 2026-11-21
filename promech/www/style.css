@@ -132,3 +132,6 @@ optgroup{font-style:normal}
 .glinks{display:flex;gap:16px;flex-wrap:wrap;padding:0 14px 4px}.glink{display:block;font-size:14px;font-weight:600;color:var(--steel);text-decoration:none}
 .lhead.ltags{padding-top:4px}
 .pill.l-excluido{color:var(--bad)}
+.sortbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;color:var(--muted);font-weight:600}
+.chip.sm{min-height:34px;padding:5px 12px;font-size:13px}
+.km{color:var(--accent);font-weight:700}
