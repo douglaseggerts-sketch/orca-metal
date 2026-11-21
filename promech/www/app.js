@@ -264,18 +264,20 @@ function fillMsg(k,l){return String(db.msgs[k]||'').replace(/\{saud\}/g,saud()).
 function openExt(url){if(isNative())location.href=url;else window.open(url,'_blank')}
 function vLeads(){
   const L=db.leads;
-  const nAp=L.filter(l=>l.status==='sugerido').length,nHo=L.filter(leadHoje).length,nCv=L.filter(l=>l.status==='respondeu'||l.status==='proposta').length,nCl=L.filter(l=>l.status==='cliente').length;
+  const raio0=db.settings.raio||100,inR0=l=>{const k=dist(l);return raio0>=999||k==null||k<=raio0};const nAp=L.filter(l=>l.status==='sugerido'&&inR0(l)).length,nHo=L.filter(leadHoje).length,nCv=L.filter(l=>l.status==='respondeu'||l.status==='proposta').length,nCl=L.filter(l=>l.status==='cliente').length;
+  const raio=db.settings.raio||100,inR=l=>{const k=dist(l);return raio>=999||k==null||k<=raio};
   let list;
   if(lfilter==='aprovar')list=L.filter(l=>l.status==='sugerido');
   else if(lfilter==='hoje')list=L.filter(leadHoje);
   else if(lfilter==='andamento')list=L.filter(l=>ATIVO.indexOf(l.status)>=0||l.status==='aprovado');
   else list=L.filter(l=>l.status!=='descartado'&&l.status!=='excluido');
-  list=list.slice().sort((a,b)=>{if(lsort==='perto'){const A=dist(a),B=dist(b);return (A==null?1e9:A)-(B==null?1e9:B)}return (a.prox||'9').localeCompare(b.prox||'9')});
+  list=list.filter(inR).slice().sort((a,b)=>{if(lsort==='perto'){const A=dist(a),B=dist(b);return (A==null?1e9:A)-(B==null?1e9:B)}return (a.prox||'9').localeCompare(b.prox||'9')});
   const chip=(k,t)=>`<button class="chip" data-act="lfilter" data-f="${k}" aria-pressed="${lfilter===k}">${t}</button>`;
   const empty={aprovar:'Nenhuma empresa esperando aprovação.',hoje:'Nada para hoje. Aprove empresas em A aprovar.',andamento:'Nenhuma conversa em andamento.',todos:'Nenhuma empresa na lista.'}[lfilter];
   return `<div><h1>Prospecção</h1><p class="sub">Você aprova quem recebe mensagem. Mande umas 3 por dia.</p></div>
   <div class="stats4"><div class="stat"><span>Aprovar</span><b>${nAp}</b></div><div class="stat"><span>Hoje</span><b>${nHo}</b></div><div class="stat"><span>Conversa</span><b>${nCv}</b></div><div class="stat"><span>Clientes</span><b>${nCl}</b></div></div>
   <div class="sortbar"><span>Ordem:</span><button class="chip sm" data-act="lsort" data-s="perto" aria-pressed="${lsort==='perto'}">Mais perto de casa</button><button class="chip sm" data-act="lsort" data-s="prio" aria-pressed="${lsort==='prio'}">Prioridade</button></div>
+  <div class="sortbar"><span>Raio:</span>${[10,25,50,100,999].map(r=>`<button class="chip sm" data-act="lraio" data-r="${r}" aria-pressed="${raio===r}">${r>=999?'Todos':r+' km'}</button>`).join('')}</div>
   <div class="chips">${chip('aprovar','A aprovar')}${chip('hoje','Hoje')}${chip('andamento','Em andamento')}${chip('todos','Todas')}</div>
   <div class="list">${list.length?list.map(l=>{
     const late=l.prox&&l.prox<today()&&ATIVO.indexOf(l.status)>=0;
@@ -505,6 +507,7 @@ const acts={
   },
   lfilter(t){lfilter=t.dataset.f;render()},
   lsort(t){lsort=t.dataset.s;render()},
+  lraio(t){db.settings.raio=+t.dataset.r;save();render()},
   slink(t,e){const l=db.leads.find(x=>x.id===t.dataset.id);if(e)e.preventDefault();openExt(socialLink(l))},
   glink(t,e){const l=db.leads.find(x=>x.id===t.dataset.id);if(e)e.preventDefault();openExt(gLink(l))},
   lead(t){leadSheet(t.dataset.id)},
