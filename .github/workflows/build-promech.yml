@@ -40,6 +40,9 @@ jobs:
       - name: Copiar o app para o Android
         run: npx cap sync android
 
+      - name: Usar sempre a mesma assinatura
+        run: mkdir -p ~/.android && cp keystore/debug.keystore ~/.android/debug.keystore
+
       - name: Compilar o APK
         working-directory: promech/android
         run: |
