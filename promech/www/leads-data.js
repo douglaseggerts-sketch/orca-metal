@@ -1,5 +1,5 @@
 /* Lista inicial de potenciais clientes (Google Maps, nov/2026).
-   [empresa, cidade, telefone, segmento, por que procurar, mensagem sugerida, id do Google Maps] */
+   [empresa, cidade, telefone, segmento, por que procurar, mensagem sugerida, id do Google Maps, versão da lista] */
 window.LEADS_SEED = [
  ['Cunha Estruturas Metálicas e Serralheria','Joinville','47996745612','Estrutura metálica','Faz estruturas e coberturas para obras; 34 avaliações nota 5.','serr','ChIJt7krNVqx3pQRzWl71zykOU4'],
  ['Teixeira Aço Estrutural','Joinville','47997038318','Estrutura metálica','Faz coberturas e telhados para terceiros; 50 avaliações nota 5.','serr','ChIJXcqF5VS33pQR_WD_0LHzwso'],
@@ -35,5 +35,12 @@ window.LEADS_SEED = [
  ['Formparts Indústria Metalúrgica','Joinville','4734670920','Indústria','Indústria com parque de máquinas: laudo NR-12.','nr12','ChIJa8LF-VGm3pQRdw8vVcyr_gU'],
  ['RM Movimentação de Carga','Joinville','47991032853','Içamento','Manutenção de equipamentos de carga: laudo e ART de pontes e talhas.','icam','ChIJs4FnJC-13pQR8h6hOiuDRP4'],
  ['Inovaação Pontes Rolantes e Talhas','Guaramirim','4733732144','Içamento','Pontes rolantes, talhas e pórticos: laudo, cálculo de viga e ART.','icam','ChIJLQ2v7Xu_3pQRGwIAafm0K4w'],
- ['Hard Soluções Industriais','Araquari','47997666315','Içamento','Equipamentos de elevação e estruturas pesadas: laudo e ART.','icam','ChIJ7YgbcAu17iMRFK3ukeRSBno']
+ ['Hard Soluções Industriais','Araquari','47997666315','Içamento','Equipamentos de elevação e estruturas pesadas: laudo e ART.','icam','ChIJ7YgbcAu17iMRFK3ukeRSBno'],
+ ['M:A:M Montagem Industrial','Joinville','47997130831','Estrutura metálica','Empresa pequena de montagem e fabricação no Iririú: provavelmente sem engenheiro.','nova','ChIJv0YiY5Gv3pQR_Ml-Lcgnhho',2],
+ ['Selum Soluções em Alumínio (box truss)','Joinville','4734401445','Estrutura metálica','Fabrica box truss para eventos: estruturas de evento pedem ART e cálculo.','serr','ChIJP-8H6H-v3pQRwp0nNsIqbgY',2],
+ ['Langer Montagem Industrial','Joinville','4732277097','Montagem industrial','Montagem industrial e estruturas: ART de montagem.','serr','ChIJxX-9KIax3pQRGpg-AGKYtBE',2],
+ ['LOC Estruturas (Alutruss)','Joinville','','Empresa nova','CNPJ aberto em 08/2025 para estruturas metálicas. Procure o contato no Instagram/Facebook.','nova','',2],
+ ['Alves Montagens','Joinville','','Empresa nova','Montagem de estruturas metálicas, aberta em 10/2025 no Morro do Meio. Procure no Instagram/Facebook.','nova','',2],
+ ['AS Montagem de Estruturas Metálicas','Joinville','','Empresa nova','Aberta em 06/2024 no Aventureiro. Procure no Instagram/Facebook.','nova','',2],
+ ['TDX Estruturas Metálicas','Joinville','','Empresa nova','Estruturas metálicas e estaleiro, aberta em 05/2024. Procure no Instagram/Facebook.','nova','',2]
 ];

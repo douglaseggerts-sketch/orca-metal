@@ -4,20 +4,23 @@ const PST={rascunho:'Rascunho',enviada:'Enviada',aprovada:'Aprovada',recusada:'R
 const RST={fazer:'A fazer',andamento:'Em andamento',emitido:'Emitido',pago:'Pago'};
 const RTIPOS=['ART','Laudo','Inspeção','Projeto','Outro'];
 const LST={sugerido:'A aprovar',aprovado:'Aprovada',contatado:'Mensagem enviada',respondeu:'Respondeu',proposta:'Proposta',cliente:'Cliente',descartado:'Descartada',excluido:'Não contatar'};
-const MSGN={serr:'Serralheria / estrutura',nr12:'Indústria / NR-12',icam:'Pontes rolantes / içamento',follow:'Follow-up'};
+const MSGN={serr:'Serralheria / estrutura',nova:'Empresa nova de estrutura',nr12:'Indústria / NR-12',icam:'Pontes rolantes / içamento',follow:'Follow-up'};
 function defMsgs(){return{
  serr:'{saud}, pessoal da {empresa}! Aqui é o Douglas, engenheiro mecânico da Promech (CREA-SC), de Joinville/Araquari.\n\nTrabalho com serralherias e caldeirarias que precisam de engenheiro só quando o cliente pede: ART de estrutura metálica, mezanino e cobertura, cálculo estrutural e desenho de fabricação. Assim vocês fecham a obra sem ter engenheiro fixo.\n\nSe aparecer algum serviço assim, posso passar um orçamento rápido? Site: promechengenharia.com.br',
  nr12:'{saud}, pessoal da {empresa}! Aqui é o Douglas, engenheiro mecânico da Promech (CREA-SC), de Joinville/Araquari.\n\nFaço laudo NR-12 de máquinas, projeto de adequação (proteções e comandos) e ART de equipamentos e estruturas. Também projeto máquinas e dispositivos sob medida.\n\nVocês têm alguma máquina, ou algum cliente, que precise de laudo ou adequação? Posso fazer uma visita sem compromisso. Site: promechengenharia.com.br',
  icam:'{saud}, pessoal da {empresa}! Aqui é o Douglas, engenheiro mecânico da Promech (CREA-SC), de Joinville/Araquari.\n\nFaço laudo e ART de pontes rolantes, talhas, pórticos e dispositivos de içamento, além de cálculo de vigas de rolamento. Posso ser o engenheiro parceiro de vocês nas instalações e inspeções dos clientes.\n\nFaz sentido conversarmos? Site: promechengenharia.com.br',
+ nova:'{saud}, pessoal da {empresa}! Aqui é o Douglas, engenheiro mecânico da Promech (CREA-SC), de Joinville/Araquari.\n\nVi o trabalho de vocês com estruturas metálicas. Empresa que está começando normalmente ainda não tem engenheiro, e muitos clientes já pedem ART, cálculo ou laudo antes de fechar.\n\nPosso ser o engenheiro de vocês só quando precisar: ART da obra, cálculo da estrutura e desenhos de fabricação, com preço fixo por serviço. Assim vocês pegam obras maiores sem custo fixo.\n\nPosso te mandar os valores? Site: promechengenharia.com.br',
  follow:'Oi, tudo bem? Só retomando a mensagem sobre ART e laudos. Se tiver alguma obra ou máquina em andamento, me manda que te passo um valor no mesmo dia. Obrigado!'}}
 function seedLeads(){return (window.LEADS_SEED||[]).map(r=>({id:uid(),empresa:r[0],cidade:r[1],fone:r[2],seg:r[3],motivo:r[4],msg:r[5],gid:r[6]||'',status:'sugerido',prox:'',obs:'',hist:[]}))}
 const DEF_EXCL='Metalgalvano\nPrado Caldeiraria\nDuarte Equipamentos\nGevitec';
 const norm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 function exclTerms(){return String(db.settings.excl||'').split('\n').map(norm).filter(Boolean)}
 function isExcl(nome){const n=norm(nome);return exclTerms().some(t=>n.indexOf(t)>=0||t.indexOf(n)>=0&&n.length>3)}
+function socialLink(l){return 'https://www.google.com/search?q='+encodeURIComponent('"'+l.empresa+'" '+(l.cidade||'')+' instagram OR facebook')}
 function gLink(l){return 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(l.empresa+' '+(l.cidade||'')+' SC')+(l.gid?'&query_place_id='+encodeURIComponent(l.gid):'')}
 function syncLeads(d){
-  const seed=window.LEADS_SEED||[];
+  const seed=window.LEADS_SEED||[],sv=d.seedV||1,maxV=Math.max(1,...seed.map(r=>r[7]||1));
+  if(sv<maxV){seed.filter(r=>(r[7]||1)>sv&&!d.leads.some(l=>norm(l.empresa)===norm(r[0]))).forEach(r=>d.leads.push({id:uid(),empresa:r[0],cidade:r[1],fone:r[2],seg:r[3],motivo:r[4],msg:r[5],gid:r[6]||'',status:'sugerido',prox:'',obs:'',hist:[]}));d.seedV=maxV}
   d.leads.forEach(l=>{if(!l.gid){const r=seed.find(x=>norm(x[0])===norm(l.empresa));if(r&&r[6])l.gid=r[6]}});
   if(d.settings.exclV!==1){d.settings.excl=d.settings.excl?d.settings.excl+'\n'+DEF_EXCL:DEF_EXCL;d.settings.exclV=1}
   const terms=String(d.settings.excl||'').split('\n').map(norm).filter(Boolean);
@@ -278,9 +281,9 @@ function vLeads(){
     const late=l.prox&&l.prox<today()&&ATIVO.indexOf(l.status)>=0;
     return `<div class="lead${late?' soon':''}">
     <button class="lhead" data-act="lead" data-id="${l.id}"><span class="who">${esc(l.empresa)}</span>
-    <span class="what">${esc(l.cidade)} · ${esc(l.seg)}${l.fone?' · '+esc(fone(l.fone)):''}</span>
+    <span class="what">${esc(l.cidade)} · ${esc(l.seg)}${l.fone?' · '+esc(fone(l.fone)):' · sem telefone'}</span>
     ${l.motivo?`<span class="why">${esc(l.motivo)}</span>`:''}</button>
-    <a class="glink" href="${gLink(l)}" data-act="glink" data-id="${l.id}">Ver no Google ›</a>
+    <div class="glinks"><a class="glink" href="${gLink(l)}" data-act="glink" data-id="${l.id}">Ver no Google ›</a><a class="glink" href="${socialLink(l)}" data-act="slink" data-id="${l.id}">Instagram / Facebook ›</a></div>
     <button class="lhead ltags" data-act="lead" data-id="${l.id}">
     <span class="tags"><span class="pill l-${l.status}">${LST[l.status]}</span>${l.prox&&ATIVO.indexOf(l.status)>=0?`<span class="pill ${late?'soon':'ok'}">Retomar ${dbr(l.prox)}</span>`:''}</span></button>
     ${l.status==='sugerido'?`<div class="lact"><button class="btn sm" data-act="lapr" data-id="${l.id}">Aprovar</button><button class="btn sm alt" data-act="ldesc" data-id="${l.id}">Descartar</button></div>`:
@@ -297,7 +300,8 @@ function leadSheet(id){
   const o=sheet(`<h3>${id?esc(l.empresa):'Nova empresa'}</h3>
   ${id&&l.status==='sugerido'?'<div class="warn">Aguardando sua aprovação. Aprove para liberar o envio.</div>':''}
   ${id&&l.status==='excluido'?'<div class="warn">Esta empresa está na lista Não contatar.</div>':''}
-  ${id?`<button class="btn alt" data-act="glink" data-id="${l.id}">Ver no Google Maps</button>`:''}
+  ${id?`<div class="actions"><button class="btn alt" data-act="glink" data-id="${l.id}">Google Maps</button><button class="btn alt" data-act="slink" data-id="${l.id}">Instagram / Facebook</button></div>`:''}
+  ${id&&!l.fone?'<p class="note">Sem telefone. Ache o WhatsApp no Instagram ou Facebook da empresa, preencha o campo Telefone e salve.</p>':''}
   ${podeEnviar?`<div class="card form">
     <label>Mensagem<select id="ld-tpl">${Object.keys(MSGN).map(k=>`<option value="${k}"${k===mk?' selected':''}>${MSGN[k]}</option>`).join('')}</select></label>
     <textarea id="ld-txt" style="min-height:170px">${esc(fillMsg(mk,l))}</textarea>
@@ -306,7 +310,7 @@ function leadSheet(id){
   <label>Empresa<input id="ld-empresa" value="${esc(l.empresa)}" autocomplete="off"></label>
   <div class="row2"><label>Cidade<input id="ld-cidade" value="${esc(l.cidade)}"></label><label>Telefone<input id="ld-fone" inputmode="tel" value="${esc(l.fone)}"></label></div>
   <div class="row2"><label>Segmento<input id="ld-seg" value="${esc(l.seg)}"></label>
-  <label>Mensagem sugerida<select id="ld-msg">${['serr','nr12','icam'].map(k=>`<option value="${k}"${l.msg===k?' selected':''}>${MSGN[k]}</option>`).join('')}</select></label></div>
+  <label>Mensagem sugerida<select id="ld-msg">${['serr','nova','nr12','icam'].map(k=>`<option value="${k}"${l.msg===k?' selected':''}>${MSGN[k]}</option>`).join('')}</select></label></div>
   <label>Por que procurar<input id="ld-motivo" value="${esc(l.motivo)}"></label>
   <div class="row2"><label>Situação<select id="ld-status">${Object.keys(LST).map(k=>`<option value="${k}"${l.status===k?' selected':''}>${LST[k]}</option>`).join('')}</select></label>
   <label>Retomar em<input id="ld-prox" type="date" value="${esc(l.prox)}"></label></div>
@@ -500,6 +504,7 @@ const acts={
     save();toast(n+(n===1?' serviço enviado':' serviços enviados')+' ao Controle');render();
   },
   lfilter(t){lfilter=t.dataset.f;render()},
+  slink(t,e){const l=db.leads.find(x=>x.id===t.dataset.id);if(e)e.preventDefault();openExt(socialLink(l))},
   glink(t,e){const l=db.leads.find(x=>x.id===t.dataset.id);if(e)e.preventDefault();openExt(gLink(l))},
   lead(t){leadSheet(t.dataset.id)},
   newlead(){leadSheet(null)},
