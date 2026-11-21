@@ -70,7 +70,7 @@ button{font:inherit;cursor:pointer}
 .tot .dim{color:var(--muted)}
 .nav{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;background:var(--surface);border-top:1px solid var(--line);
   padding:6px max(16px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));z-index:5}
-.nav>div{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;width:100%;max-width:560px}
+.nav>div{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;width:100%;max-width:560px}
 .nav button{background:none;border:0;border-top:3px solid transparent;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0 4px;font-size:12px;font-weight:600;min-height:52px}
 .nav button[aria-current="true"]{color:var(--ink);border-top-color:var(--accent)}
 .nav svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
@@ -112,3 +112,20 @@ optgroup{font-style:normal}
 .stats3 .stat b{font-size:15px}
 .mini{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .mini .btn{min-height:40px;padding:6px 8px;font-size:14px}
+
+.stats4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.stats4 .stat{padding:8px 10px}.stats4 .stat b{font-size:17px}.stats4 .stat span{font-size:11px;letter-spacing:.3px}
+.lead{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.lead.soon{border-left:4px solid var(--warn)}
+.lhead{display:flex;flex-direction:column;gap:3px;text-align:left;width:100%;background:none;border:0;padding:12px 14px;color:var(--ink)}
+.lhead .who{font-weight:600;overflow-wrap:anywhere}
+.lhead .what{color:var(--muted);font-size:14px}
+.lhead .why{font-size:14px}
+.lhead .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:3px}
+.lact{display:flex;gap:8px;padding:0 14px 12px}
+.lact .btn{flex:1}
+.hist{display:flex;flex-direction:column;gap:4px;font-size:14px;border-top:1px solid var(--line);padding-top:10px}
+.hist .mono{color:var(--muted);font-size:13px}
+.pill.l-sugerido{color:var(--warn)}.pill.l-aprovado{color:var(--steel)}.pill.l-contatado{color:var(--muted)}
+.pill.l-respondeu{color:var(--accent)}.pill.l-proposta{color:var(--warn)}.pill.l-cliente{color:var(--ok)}.pill.l-descartado{color:var(--muted)}
+.nav button{font-size:11px}

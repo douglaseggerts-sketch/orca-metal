@@ -3,6 +3,14 @@ const {UN,money,qfmt,calc,itTotal}=Core;
 const PST={rascunho:'Rascunho',enviada:'Enviada',aprovada:'Aprovada',recusada:'Recusada'};
 const RST={fazer:'A fazer',andamento:'Em andamento',emitido:'Emitido',pago:'Pago'};
 const RTIPOS=['ART','Laudo','Inspeção','Projeto','Outro'];
+const LST={sugerido:'A aprovar',aprovado:'Aprovada',contatado:'Mensagem enviada',respondeu:'Respondeu',proposta:'Proposta',cliente:'Cliente',descartado:'Descartada'};
+const MSGN={serr:'Serralheria / estrutura',nr12:'Indústria / NR-12',icam:'Pontes rolantes / içamento',follow:'Follow-up'};
+function defMsgs(){return{
+ serr:'{saud}, pessoal da {empresa}! Aqui é o Douglas, engenheiro mecânico da Promech (CREA-SC), de Joinville/Araquari.\n\nTrabalho com serralherias e caldeirarias que precisam de engenheiro só quando o cliente pede: ART de estrutura metálica, mezanino e cobertura, cálculo estrutural e desenho de fabricação. Assim vocês fecham a obra sem ter engenheiro fixo.\n\nSe aparecer algum serviço assim, posso passar um orçamento rápido? Site: promechengenharia.com.br',
+ nr12:'{saud}, pessoal da {empresa}! Aqui é o Douglas, engenheiro mecânico da Promech (CREA-SC), de Joinville/Araquari.\n\nFaço laudo NR-12 de máquinas, projeto de adequação (proteções e comandos) e ART de equipamentos e estruturas. Também projeto máquinas e dispositivos sob medida.\n\nVocês têm alguma máquina, ou algum cliente, que precise de laudo ou adequação? Posso fazer uma visita sem compromisso. Site: promechengenharia.com.br',
+ icam:'{saud}, pessoal da {empresa}! Aqui é o Douglas, engenheiro mecânico da Promech (CREA-SC), de Joinville/Araquari.\n\nFaço laudo e ART de pontes rolantes, talhas, pórticos e dispositivos de içamento, além de cálculo de vigas de rolamento. Posso ser o engenheiro parceiro de vocês nas instalações e inspeções dos clientes.\n\nFaz sentido conversarmos? Site: promechengenharia.com.br',
+ follow:'Oi, tudo bem? Só retomando a mensagem sobre ART e laudos. Se tiver alguma obra ou máquina em andamento, me manda que te passo um valor no mesmo dia. Obrigado!'}}
+function seedLeads(){return (window.LEADS_SEED||[]).map(r=>({id:uid(),empresa:r[0],cidade:r[1],fone:r[2],seg:r[3],motivo:r[4],msg:r[5],status:'sugerido',prox:'',obs:'',hist:[]}))}
 const CATS=['ART','Laudos e inspeções','Projetos','Consultoria','Despesas','Outros'];
 /* [id, categoria, nome, unidade, valor de exemplo em R$, detalhe para o cliente] */
 const CATALOG=[
@@ -55,10 +63,10 @@ function seed(){
     {id:uid(),propId:'',cliente:'Indústria Exemplo Ltda',tipo:'Inspeção',desc:'Vaso de pressão VP-01 (exemplo)',art:'',emissao:addDays(t,-340),vence:addDays(t,25),status:'emitido',valor:900,obs:''},
     {id:uid(),propId:'',cliente:'Metalúrgica Exemplo',tipo:'ART',desc:'Responsabilidade técnica mensal (exemplo)',art:'',emissao:'',vence:'',status:'andamento',valor:450,obs:''}
   ];
-  return{v:1,seq:1,settings:defSettings(),catalog:catalog,proposals:[ex],records:recs,clients:[]};
+  return{v:1,seq:1,settings:defSettings(),catalog:catalog,proposals:[ex],records:recs,clients:[],leads:seedLeads(),msgs:defMsgs()};
 }
 function valid(d){return d&&Array.isArray(d.proposals)&&Array.isArray(d.records)&&Array.isArray(d.catalog)&&d.settings}
-function fix(d){d.settings=Object.assign(defSettings(),d.settings);if(!Array.isArray(d.clients))d.clients=[];return d}
+function fix(d){d.settings=Object.assign(defSettings(),d.settings);if(!Array.isArray(d.clients))d.clients=[];if(!Array.isArray(d.leads))d.leads=seedLeads();d.msgs=Object.assign(defMsgs(),d.msgs);return d}
 function load(){
   try{const t='__t';localStorage.setItem(t,'1');localStorage.removeItem(t)}catch(e){storageOK=false}
   try{const r=localStorage.getItem(KEY);if(r){const d=JSON.parse(r);if(valid(d))return fix(d)}}catch(e){}
@@ -68,7 +76,7 @@ let db=load();
 function save(){try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){storageOK=false}}
 save();
 
-let view='prop',curId=null,editIdx=-1,editRec=null,editCat=null,filter='todos',confirmT=null;
+let lfilter='aprovar',editLead=null,view='prop',curId=null,editIdx=-1,editRec=null,editCat=null,filter='todos',confirmT=null;
 const cur=()=>db.proposals.find(p=>p.id===curId);
 
 /* ---------- auxiliares ---------- */
@@ -211,6 +219,11 @@ function vCfg(){
     </div>
     <label>Pagamento padrão<textarea id="s-pagamento" data-s="pagamento">${esc(s.pagamento)}</textarea></label>
   </div>
+  <h2>Mensagens de prospecção</h2>
+  <div class="card form">
+    <p class="note">{saud} vira Bom dia, Boa tarde ou Boa noite. {empresa} vira o nome da empresa.</p>
+    ${Object.keys(MSGN).map(k=>`<label>${MSGN[k]}<textarea data-m="${k}" style="min-height:140px">${esc(db.msgs[k])}</textarea></label>`).join('')}
+  </div>
   <h2>Cópia de segurança</h2>
   <div class="card form">
     <p class="note">Os dados ficam só neste aparelho. Copie o backup de vez em quando e guarde numa conversa sua ou num bloco de notas.</p>
@@ -219,16 +232,82 @@ function vCfg(){
     <button class="btn alt" data-act="restore">Restaurar (substitui os dados atuais)</button>
   </div>`;
 }
+/* ---------- prospecção ---------- */
+const ATIVO=['contatado','respondeu','proposta'];
+function leadHoje(l){return l.status==='aprovado'||(ATIVO.indexOf(l.status)>=0&&l.prox&&l.prox<=today())}
+function waNum(f){let d=String(f||'').replace(/\D/g,'');if(d.length===10||d.length===11)d='55'+d;return d}
+function isCel(f){const d=String(f||'').replace(/\D/g,'').replace(/^55/,'');return d.length===11&&d[2]==='9'}
+function fone(f){const d=String(f||'').replace(/\D/g,'').replace(/^55/,'');if(d.length===11)return '('+d.slice(0,2)+') '+d.slice(2,7)+'-'+d.slice(7);if(d.length===10)return '('+d.slice(0,2)+') '+d.slice(2,6)+'-'+d.slice(6);return f||''}
+function saud(){const h=new Date().getHours();return h<12?'Bom dia':h<18?'Boa tarde':'Boa noite'}
+function fillMsg(k,l){return String(db.msgs[k]||'').replace(/\{saud\}/g,saud()).replace(/\{empresa\}/g,l.empresa||'')}
+function openExt(url){if(isNative())location.href=url;else window.open(url,'_blank')}
+function vLeads(){
+  const L=db.leads;
+  const nAp=L.filter(l=>l.status==='sugerido').length,nHo=L.filter(leadHoje).length,nCv=L.filter(l=>l.status==='respondeu'||l.status==='proposta').length,nCl=L.filter(l=>l.status==='cliente').length;
+  let list;
+  if(lfilter==='aprovar')list=L.filter(l=>l.status==='sugerido');
+  else if(lfilter==='hoje')list=L.filter(leadHoje);
+  else if(lfilter==='andamento')list=L.filter(l=>ATIVO.indexOf(l.status)>=0||l.status==='aprovado');
+  else list=L.filter(l=>l.status!=='descartado');
+  list=list.slice().sort((a,b)=>(a.prox||'9').localeCompare(b.prox||'9'));
+  const chip=(k,t)=>`<button class="chip" data-act="lfilter" data-f="${k}" aria-pressed="${lfilter===k}">${t}</button>`;
+  const empty={aprovar:'Nenhuma empresa esperando aprovação.',hoje:'Nada para hoje. Aprove empresas em A aprovar.',andamento:'Nenhuma conversa em andamento.',todos:'Nenhuma empresa na lista.'}[lfilter];
+  return `<div><h1>Prospecção</h1><p class="sub">Você aprova quem recebe mensagem. Mande umas 3 por dia.</p></div>
+  <div class="stats4"><div class="stat"><span>Aprovar</span><b>${nAp}</b></div><div class="stat"><span>Hoje</span><b>${nHo}</b></div><div class="stat"><span>Conversa</span><b>${nCv}</b></div><div class="stat"><span>Clientes</span><b>${nCl}</b></div></div>
+  <div class="chips">${chip('aprovar','A aprovar')}${chip('hoje','Hoje')}${chip('andamento','Em andamento')}${chip('todos','Todas')}</div>
+  <div class="list">${list.length?list.map(l=>{
+    const late=l.prox&&l.prox<today()&&ATIVO.indexOf(l.status)>=0;
+    return `<div class="lead${late?' soon':''}">
+    <button class="lhead" data-act="lead" data-id="${l.id}"><span class="who">${esc(l.empresa)}</span>
+    <span class="what">${esc(l.cidade)} · ${esc(l.seg)}${l.fone?' · '+esc(fone(l.fone)):''}</span>
+    ${l.motivo?`<span class="why">${esc(l.motivo)}</span>`:''}
+    <span class="tags"><span class="pill l-${l.status}">${LST[l.status]}</span>${l.prox&&ATIVO.indexOf(l.status)>=0?`<span class="pill ${late?'soon':'ok'}">Retomar ${dbr(l.prox)}</span>`:''}</span></button>
+    ${l.status==='sugerido'?`<div class="lact"><button class="btn sm" data-act="lapr" data-id="${l.id}">Aprovar</button><button class="btn sm alt" data-act="ldesc" data-id="${l.id}">Descartar</button></div>`:
+      l.status==='aprovado'||leadHoje(l)?`<div class="lact"><button class="btn sm" data-act="lead" data-id="${l.id}">Enviar mensagem</button></div>`:''}
+    </div>`}).join(''):`<div class="empty">${empty}</div>`}</div>
+  ${lfilter==='todos'&&L.some(l=>l.status==='descartado')?`<p class="note">${L.filter(l=>l.status==='descartado').length} descartadas ficam escondidas. <button class="ghost" data-act="lrest">Trazer de volta para aprovação</button></p>`:''}
+  <button class="fab" data-act="newlead">+ Empresa</button>`;
+}
+function leadSheet(id){
+  const l=id?db.leads.find(x=>x.id===id):{empresa:'',cidade:'',fone:'',seg:'',motivo:'',msg:'serr',status:'sugerido',prox:'',obs:'',hist:[]};editLead=id||null;
+  const podeEnviar=id&&l.status!=='sugerido'&&l.status!=='descartado';
+  const mk=l.status==='aprovado'||l.status==='sugerido'?(l.msg||'serr'):'follow';
+  const o=sheet(`<h3>${id?esc(l.empresa):'Nova empresa'}</h3>
+  ${id&&l.status==='sugerido'?'<div class="warn">Aguardando sua aprovação. Aprove para liberar o envio.</div>':''}
+  ${podeEnviar?`<div class="card form">
+    <label>Mensagem<select id="ld-tpl">${Object.keys(MSGN).map(k=>`<option value="${k}"${k===mk?' selected':''}>${MSGN[k]}</option>`).join('')}</select></label>
+    <textarea id="ld-txt" style="min-height:170px">${esc(fillMsg(mk,l))}</textarea>
+    <div class="actions">${l.fone?`<button class="btn wide" data-act="lwa">${isCel(l.fone)?'Abrir no WhatsApp':'Tentar no WhatsApp (fixo)'}</button><button class="btn alt" data-act="ltel">Ligar</button>`:''}<button class="btn alt${l.fone?'':' wide'}" data-act="lcopy">Copiar texto</button></div>
+    <p class="note">Ao abrir o WhatsApp, a empresa passa para Mensagem enviada e volta para Hoje em 3 dias, se ninguém responder.</p></div>`:''}
+  <label>Empresa<input id="ld-empresa" value="${esc(l.empresa)}" autocomplete="off"></label>
+  <div class="row2"><label>Cidade<input id="ld-cidade" value="${esc(l.cidade)}"></label><label>Telefone<input id="ld-fone" inputmode="tel" value="${esc(l.fone)}"></label></div>
+  <div class="row2"><label>Segmento<input id="ld-seg" value="${esc(l.seg)}"></label>
+  <label>Mensagem sugerida<select id="ld-msg">${['serr','nr12','icam'].map(k=>`<option value="${k}"${l.msg===k?' selected':''}>${MSGN[k]}</option>`).join('')}</select></label></div>
+  <label>Por que procurar<input id="ld-motivo" value="${esc(l.motivo)}"></label>
+  <div class="row2"><label>Situação<select id="ld-status">${Object.keys(LST).map(k=>`<option value="${k}"${l.status===k?' selected':''}>${LST[k]}</option>`).join('')}</select></label>
+  <label>Retomar em<input id="ld-prox" type="date" value="${esc(l.prox)}"></label></div>
+  <label>Anotações<textarea id="ld-obs" placeholder="Com quem falou, o que pediram">${esc(l.obs)}</textarea></label>
+  ${l.hist&&l.hist.length?`<div class="hist">${l.hist.slice().reverse().map(h=>`<div><span class="mono">${dbr(h.d)}</span> ${esc(h.t)}</div>`).join('')}</div>`:''}
+  <div class="actions"><button class="btn" data-act="savelead">Salvar</button><button class="btn alt" data-act="close">Fechar</button>
+  ${id&&l.status!=='cliente'&&l.status!=='sugerido'?'<button class="btn alt wide" data-act="l2prop">Pediu orçamento: criar proposta</button>':''}
+  ${id?'<button class="btn bad wide" data-act="dellead">Excluir empresa</button>':''}</div>`);
+  const tpl=o.querySelector('#ld-tpl');if(tpl)tpl.addEventListener('change',()=>{$('#ld-txt').value=fillMsg(tpl.value,l)});
+}
+function leadSent(l,how){
+  if(l.status==='aprovado'||l.status==='sugerido')l.status='contatado';
+  l.prox=addDays(today(),3);l.hist=l.hist||[];l.hist.push({d:today(),t:how});save();
+}
 const ICON={
+  lead:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
   prop:'<svg viewBox="0 0 24 24"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 12h6M10 16h6"/></svg>',
   ctrl:'<svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg>',
   cat:'<svg viewBox="0 0 24 24"><path d="M3 8l9-4 9 4-9 4zM3 12l9 4 9-4M3 16l9 4 9-4"/></svg>',
   cfg:'<svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>'
 };
 function render(){
-  const v=view==='pedit'?vPedit():view==='ctrl'?vCtrl():view==='cat'?vCat():view==='cfg'?vCfg():vProp();
+  const v=view==='pedit'?vPedit():view==='lead'?vLeads():view==='ctrl'?vCtrl():view==='cat'?vCat():view==='cfg'?vCfg():vProp();
   const tab=view==='pedit'?'prop':view;
-  const nav=[['prop','Propostas'],['ctrl','Controle'],['cat','Catálogo'],['cfg','Ajustes']].map(a=>`<button data-act="tab" data-v="${a[0]}"${tab===a[0]?' aria-current="true"':''}>${ICON[a[0]]}${a[1]}</button>`).join('');
+  const nav=[['prop','Propostas'],['lead','Prospecção'],['ctrl','Controle'],['cat','Catálogo'],['cfg','Ajustes']].map(a=>`<button data-act="tab" data-v="${a[0]}"${tab===a[0]?' aria-current="true"':''}>${ICON[a[0]]}${a[1]}</button>`).join('');
   $('#app').innerHTML=v+`<nav class="nav"><div>${nav}</div></nav>`;
   if(view==='pedit')updateTotals();
 }
@@ -396,6 +475,36 @@ const acts={
     if(p.status!=='aprovada')p.status='aprovada';
     save();toast(n+(n===1?' serviço enviado':' serviços enviados')+' ao Controle');render();
   },
+  lfilter(t){lfilter=t.dataset.f;render()},
+  lead(t){leadSheet(t.dataset.id)},
+  newlead(){leadSheet(null)},
+  lapr(t){const l=db.leads.find(x=>x.id===t.dataset.id);l.status='aprovado';l.hist=l.hist||[];l.hist.push({d:today(),t:'Aprovada para contato'});save();render();toast('Aprovada: '+l.empresa)},
+  ldesc(t){const l=db.leads.find(x=>x.id===t.dataset.id);l.status='descartado';save();render();toast('Descartada')},
+  lrest(){db.leads.forEach(l=>{if(l.status==='descartado')l.status='sugerido'});save();render()},
+  lwa(){const l=db.leads.find(x=>x.id===editLead);const tx=$('#ld-txt').value;leadSent(l,'WhatsApp: '+MSGN[$('#ld-tpl').value]);closeSheet();render();openExt('https://wa.me/'+waNum(l.fone)+'?text='+encodeURIComponent(tx))},
+  ltel(){const l=db.leads.find(x=>x.id===editLead);leadSent(l,'Ligação');closeSheet();render();openExt('tel:+'+waNum(l.fone))},
+  lcopy(){
+    const l=db.leads.find(x=>x.id===editLead),ta=$('#ld-txt');
+    const ok=()=>{leadSent(l,'Mensagem copiada: '+MSGN[$('#ld-tpl').value]);toast('Texto copiado')};
+    try{navigator.clipboard.writeText(ta.value).then(ok,()=>{ta.select();toast('Selecione e copie manualmente')})}catch(e){ta.select()}
+  },
+  savelead(){
+    const d={empresa:$('#ld-empresa').value.trim(),cidade:$('#ld-cidade').value.trim(),fone:$('#ld-fone').value.trim(),seg:$('#ld-seg').value.trim(),msg:$('#ld-msg').value,motivo:$('#ld-motivo').value.trim(),status:$('#ld-status').value,prox:$('#ld-prox').value,obs:$('#ld-obs').value.trim()};
+    if(!d.empresa){toast('Digite o nome da empresa');return}
+    if(editLead){const l=db.leads.find(x=>x.id===editLead);if(l.status!==d.status){l.hist=l.hist||[];l.hist.push({d:today(),t:'Situação: '+LST[d.status]})}Object.assign(l,d)}
+    else db.leads.push(Object.assign({id:uid(),hist:[]},d));
+    save();closeSheet();render();
+  },
+  dellead(t){
+    if(t.dataset.arm!=='1'){t.dataset.arm='1';t.textContent='Toque de novo para excluir';return}
+    db.leads=db.leads.filter(x=>x.id!==editLead);save();closeSheet();render();
+  },
+  l2prop(){
+    const l=db.leads.find(x=>x.id===editLead),s=db.settings;db.seq=(db.seq||0)+1;
+    const p={id:uid(),num:'PRO-'+String(db.seq).padStart(3,'0'),cliente:l.empresa,doc:'',fone:fone(l.fone),email:'',ref:'',data:today(),status:'rascunho',itens:[],desconto:0,validade:s.validade,prazo:'',pagamento:s.pagamento,obs:''};
+    db.proposals.push(p);upsertClient(p);l.status='proposta';l.hist=l.hist||[];l.hist.push({d:today(),t:'Proposta '+p.num+' criada'});
+    save();closeSheet();curId=p.id;view='pedit';render();scrollTo(0,0);
+  },
   newrec(){recSheet(null)},
   rec(t){recSheet(t.dataset.id)},
   addmes(t){
@@ -437,6 +546,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
 document.addEventListener('input',e=>{
   const t=e.target;
   if(t.dataset.b){const p=cur();if(!p)return;p[t.dataset.b]=t.hasAttribute('data-n')?pn(t.value):t.value;save();if(t.hasAttribute('data-n'))updateTotals()}
+  else if(t.dataset.m){db.msgs[t.dataset.m]=t.value;save()}
   else if(t.dataset.s){db.settings[t.dataset.s]=t.hasAttribute('data-n')?pn(t.value):t.value;save()}
 });
 document.addEventListener('change',e=>{
