@@ -129,3 +129,6 @@ optgroup{font-style:normal}
 .pill.l-sugerido{color:var(--warn)}.pill.l-aprovado{color:var(--steel)}.pill.l-contatado{color:var(--muted)}
 .pill.l-respondeu{color:var(--accent)}.pill.l-proposta{color:var(--warn)}.pill.l-cliente{color:var(--ok)}.pill.l-descartado{color:var(--muted)}
 .nav button{font-size:11px}
+.glink{display:block;padding:0 14px 4px;font-size:14px;font-weight:600;color:var(--steel);text-decoration:none}
+.lhead.ltags{padding-top:4px}
+.pill.l-excluido{color:var(--bad)}

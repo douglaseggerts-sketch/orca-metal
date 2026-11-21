@@ -3,14 +3,27 @@ const {UN,money,qfmt,calc,itTotal}=Core;
 const PST={rascunho:'Rascunho',enviada:'Enviada',aprovada:'Aprovada',recusada:'Recusada'};
 const RST={fazer:'A fazer',andamento:'Em andamento',emitido:'Emitido',pago:'Pago'};
 const RTIPOS=['ART','Laudo','Inspeção','Projeto','Outro'];
-const LST={sugerido:'A aprovar',aprovado:'Aprovada',contatado:'Mensagem enviada',respondeu:'Respondeu',proposta:'Proposta',cliente:'Cliente',descartado:'Descartada'};
+const LST={sugerido:'A aprovar',aprovado:'Aprovada',contatado:'Mensagem enviada',respondeu:'Respondeu',proposta:'Proposta',cliente:'Cliente',descartado:'Descartada',excluido:'Não contatar'};
 const MSGN={serr:'Serralheria / estrutura',nr12:'Indústria / NR-12',icam:'Pontes rolantes / içamento',follow:'Follow-up'};
 function defMsgs(){return{
  serr:'{saud}, pessoal da {empresa}! Aqui é o Douglas, engenheiro mecânico da Promech (CREA-SC), de Joinville/Araquari.\n\nTrabalho com serralherias e caldeirarias que precisam de engenheiro só quando o cliente pede: ART de estrutura metálica, mezanino e cobertura, cálculo estrutural e desenho de fabricação. Assim vocês fecham a obra sem ter engenheiro fixo.\n\nSe aparecer algum serviço assim, posso passar um orçamento rápido? Site: promechengenharia.com.br',
  nr12:'{saud}, pessoal da {empresa}! Aqui é o Douglas, engenheiro mecânico da Promech (CREA-SC), de Joinville/Araquari.\n\nFaço laudo NR-12 de máquinas, projeto de adequação (proteções e comandos) e ART de equipamentos e estruturas. Também projeto máquinas e dispositivos sob medida.\n\nVocês têm alguma máquina, ou algum cliente, que precise de laudo ou adequação? Posso fazer uma visita sem compromisso. Site: promechengenharia.com.br',
  icam:'{saud}, pessoal da {empresa}! Aqui é o Douglas, engenheiro mecânico da Promech (CREA-SC), de Joinville/Araquari.\n\nFaço laudo e ART de pontes rolantes, talhas, pórticos e dispositivos de içamento, além de cálculo de vigas de rolamento. Posso ser o engenheiro parceiro de vocês nas instalações e inspeções dos clientes.\n\nFaz sentido conversarmos? Site: promechengenharia.com.br',
  follow:'Oi, tudo bem? Só retomando a mensagem sobre ART e laudos. Se tiver alguma obra ou máquina em andamento, me manda que te passo um valor no mesmo dia. Obrigado!'}}
-function seedLeads(){return (window.LEADS_SEED||[]).map(r=>({id:uid(),empresa:r[0],cidade:r[1],fone:r[2],seg:r[3],motivo:r[4],msg:r[5],status:'sugerido',prox:'',obs:'',hist:[]}))}
+function seedLeads(){return (window.LEADS_SEED||[]).map(r=>({id:uid(),empresa:r[0],cidade:r[1],fone:r[2],seg:r[3],motivo:r[4],msg:r[5],gid:r[6]||'',status:'sugerido',prox:'',obs:'',hist:[]}))}
+const DEF_EXCL='Metalgalvano\nPrado Caldeiraria\nDuarte Equipamentos\nGevitec';
+const norm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+function exclTerms(){return String(db.settings.excl||'').split('\n').map(norm).filter(Boolean)}
+function isExcl(nome){const n=norm(nome);return exclTerms().some(t=>n.indexOf(t)>=0||t.indexOf(n)>=0&&n.length>3)}
+function gLink(l){return 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(l.empresa+' '+(l.cidade||'')+' SC')+(l.gid?'&query_place_id='+encodeURIComponent(l.gid):'')}
+function syncLeads(d){
+  const seed=window.LEADS_SEED||[];
+  d.leads.forEach(l=>{if(!l.gid){const r=seed.find(x=>norm(x[0])===norm(l.empresa));if(r&&r[6])l.gid=r[6]}});
+  if(d.settings.exclV!==1){d.settings.excl=d.settings.excl?d.settings.excl+'\n'+DEF_EXCL:DEF_EXCL;d.settings.exclV=1}
+  const terms=String(d.settings.excl||'').split('\n').map(norm).filter(Boolean);
+  d.leads.forEach(l=>{const n=norm(l.empresa);if(l.status!=='excluido'&&terms.some(t=>n.indexOf(t)>=0)){l.status='excluido'}});
+  return d;
+}
 const CATS=['ART','Laudos e inspeções','Projetos','Consultoria','Despesas','Outros'];
 /* [id, categoria, nome, unidade, valor de exemplo em R$, detalhe para o cliente] */
 const CATALOG=[
@@ -63,10 +76,10 @@ function seed(){
     {id:uid(),propId:'',cliente:'Indústria Exemplo Ltda',tipo:'Inspeção',desc:'Vaso de pressão VP-01 (exemplo)',art:'',emissao:addDays(t,-340),vence:addDays(t,25),status:'emitido',valor:900,obs:''},
     {id:uid(),propId:'',cliente:'Metalúrgica Exemplo',tipo:'ART',desc:'Responsabilidade técnica mensal (exemplo)',art:'',emissao:'',vence:'',status:'andamento',valor:450,obs:''}
   ];
-  return{v:1,seq:1,settings:defSettings(),catalog:catalog,proposals:[ex],records:recs,clients:[],leads:seedLeads(),msgs:defMsgs()};
+  return syncLeads({v:1,seq:1,settings:defSettings(),catalog:catalog,proposals:[ex],records:recs,clients:[],leads:seedLeads(),msgs:defMsgs()});
 }
 function valid(d){return d&&Array.isArray(d.proposals)&&Array.isArray(d.records)&&Array.isArray(d.catalog)&&d.settings}
-function fix(d){d.settings=Object.assign(defSettings(),d.settings);if(!Array.isArray(d.clients))d.clients=[];if(!Array.isArray(d.leads))d.leads=seedLeads();d.msgs=Object.assign(defMsgs(),d.msgs);return d}
+function fix(d){d.settings=Object.assign(defSettings(),d.settings);if(!Array.isArray(d.clients))d.clients=[];if(!Array.isArray(d.leads))d.leads=seedLeads();d.msgs=Object.assign(defMsgs(),d.msgs);return syncLeads(d)}
 function load(){
   try{const t='__t';localStorage.setItem(t,'1');localStorage.removeItem(t)}catch(e){storageOK=false}
   try{const r=localStorage.getItem(KEY);if(r){const d=JSON.parse(r);if(valid(d))return fix(d)}}catch(e){}
@@ -219,6 +232,12 @@ function vCfg(){
     </div>
     <label>Pagamento padrão<textarea id="s-pagamento" data-s="pagamento">${esc(s.pagamento)}</textarea></label>
   </div>
+  <h2>Não contatar</h2>
+  <div class="card form">
+    <p class="note">Uma empresa por linha. Quem estiver aqui sai da Prospecção e não recebe mensagem.</p>
+    <textarea id="s-excl" data-s="excl" style="min-height:120px">${esc(db.settings.excl)}</textarea>
+    <button class="btn alt" data-act="applyexcl">Aplicar à lista</button>
+  </div>
   <h2>Mensagens de prospecção</h2>
   <div class="card form">
     <p class="note">{saud} vira Bom dia, Boa tarde ou Boa noite. {empresa} vira o nome da empresa.</p>
@@ -248,7 +267,7 @@ function vLeads(){
   if(lfilter==='aprovar')list=L.filter(l=>l.status==='sugerido');
   else if(lfilter==='hoje')list=L.filter(leadHoje);
   else if(lfilter==='andamento')list=L.filter(l=>ATIVO.indexOf(l.status)>=0||l.status==='aprovado');
-  else list=L.filter(l=>l.status!=='descartado');
+  else list=L.filter(l=>l.status!=='descartado'&&l.status!=='excluido');
   list=list.slice().sort((a,b)=>(a.prox||'9').localeCompare(b.prox||'9'));
   const chip=(k,t)=>`<button class="chip" data-act="lfilter" data-f="${k}" aria-pressed="${lfilter===k}">${t}</button>`;
   const empty={aprovar:'Nenhuma empresa esperando aprovação.',hoje:'Nada para hoje. Aprove empresas em A aprovar.',andamento:'Nenhuma conversa em andamento.',todos:'Nenhuma empresa na lista.'}[lfilter];
@@ -260,20 +279,25 @@ function vLeads(){
     return `<div class="lead${late?' soon':''}">
     <button class="lhead" data-act="lead" data-id="${l.id}"><span class="who">${esc(l.empresa)}</span>
     <span class="what">${esc(l.cidade)} · ${esc(l.seg)}${l.fone?' · '+esc(fone(l.fone)):''}</span>
-    ${l.motivo?`<span class="why">${esc(l.motivo)}</span>`:''}
+    ${l.motivo?`<span class="why">${esc(l.motivo)}</span>`:''}</button>
+    <a class="glink" href="${gLink(l)}" data-act="glink" data-id="${l.id}">Ver no Google ›</a>
+    <button class="lhead ltags" data-act="lead" data-id="${l.id}">
     <span class="tags"><span class="pill l-${l.status}">${LST[l.status]}</span>${l.prox&&ATIVO.indexOf(l.status)>=0?`<span class="pill ${late?'soon':'ok'}">Retomar ${dbr(l.prox)}</span>`:''}</span></button>
     ${l.status==='sugerido'?`<div class="lact"><button class="btn sm" data-act="lapr" data-id="${l.id}">Aprovar</button><button class="btn sm alt" data-act="ldesc" data-id="${l.id}">Descartar</button></div>`:
       l.status==='aprovado'||leadHoje(l)?`<div class="lact"><button class="btn sm" data-act="lead" data-id="${l.id}">Enviar mensagem</button></div>`:''}
     </div>`}).join(''):`<div class="empty">${empty}</div>`}</div>
+  ${L.some(l=>l.status==='excluido')?`<p class="note">${L.filter(l=>l.status==='excluido').length} na lista Não contatar (veja em Ajustes).</p>`:''}
   ${lfilter==='todos'&&L.some(l=>l.status==='descartado')?`<p class="note">${L.filter(l=>l.status==='descartado').length} descartadas ficam escondidas. <button class="ghost" data-act="lrest">Trazer de volta para aprovação</button></p>`:''}
   <button class="fab" data-act="newlead">+ Empresa</button>`;
 }
 function leadSheet(id){
   const l=id?db.leads.find(x=>x.id===id):{empresa:'',cidade:'',fone:'',seg:'',motivo:'',msg:'serr',status:'sugerido',prox:'',obs:'',hist:[]};editLead=id||null;
-  const podeEnviar=id&&l.status!=='sugerido'&&l.status!=='descartado';
+  const podeEnviar=id&&['sugerido','descartado','excluido'].indexOf(l.status)<0;
   const mk=l.status==='aprovado'||l.status==='sugerido'?(l.msg||'serr'):'follow';
   const o=sheet(`<h3>${id?esc(l.empresa):'Nova empresa'}</h3>
   ${id&&l.status==='sugerido'?'<div class="warn">Aguardando sua aprovação. Aprove para liberar o envio.</div>':''}
+  ${id&&l.status==='excluido'?'<div class="warn">Esta empresa está na lista Não contatar.</div>':''}
+  ${id?`<button class="btn alt" data-act="glink" data-id="${l.id}">Ver no Google Maps</button>`:''}
   ${podeEnviar?`<div class="card form">
     <label>Mensagem<select id="ld-tpl">${Object.keys(MSGN).map(k=>`<option value="${k}"${k===mk?' selected':''}>${MSGN[k]}</option>`).join('')}</select></label>
     <textarea id="ld-txt" style="min-height:170px">${esc(fillMsg(mk,l))}</textarea>
@@ -476,6 +500,7 @@ const acts={
     save();toast(n+(n===1?' serviço enviado':' serviços enviados')+' ao Controle');render();
   },
   lfilter(t){lfilter=t.dataset.f;render()},
+  glink(t,e){const l=db.leads.find(x=>x.id===t.dataset.id);if(e)e.preventDefault();openExt(gLink(l))},
   lead(t){leadSheet(t.dataset.id)},
   newlead(){leadSheet(null)},
   lapr(t){const l=db.leads.find(x=>x.id===t.dataset.id);l.status='aprovado';l.hist=l.hist||[];l.hist.push({d:today(),t:'Aprovada para contato'});save();render();toast('Aprovada: '+l.empresa)},
@@ -491,6 +516,7 @@ const acts={
   savelead(){
     const d={empresa:$('#ld-empresa').value.trim(),cidade:$('#ld-cidade').value.trim(),fone:$('#ld-fone').value.trim(),seg:$('#ld-seg').value.trim(),msg:$('#ld-msg').value,motivo:$('#ld-motivo').value.trim(),status:$('#ld-status').value,prox:$('#ld-prox').value,obs:$('#ld-obs').value.trim()};
     if(!d.empresa){toast('Digite o nome da empresa');return}
+    if(isExcl(d.empresa)&&d.status!=='excluido'){d.status='excluido';toast('Empresa da lista Não contatar')}
     if(editLead){const l=db.leads.find(x=>x.id===editLead);if(l.status!==d.status){l.hist=l.hist||[];l.hist.push({d:today(),t:'Situação: '+LST[d.status]})}Object.assign(l,d)}
     else db.leads.push(Object.assign({id:uid(),hist:[]},d));
     save();closeSheet();render();
@@ -534,6 +560,7 @@ const acts={
     if(t.dataset.arm!=='1'){t.dataset.arm='1';t.textContent='Toque de novo para excluir';return}
     db.catalog=db.catalog.filter(x=>x.id!==editCat);save();closeSheet();render();
   },
+  applyexcl(){let n=0;db.leads.forEach(l=>{if(l.status!=='excluido'&&isExcl(l.empresa)){l.status='excluido';n++}});save();toast(n?n+' empresa(s) movida(s) para Não contatar':'Nenhuma empresa da lista bate com esses nomes')},
   logoclear(){db.settings.logo=null;save();render()},
   backup(){textSheet('Backup dos dados',JSON.stringify(db),'Guarde este texto em lugar seguro. Para restaurar, cole em Ajustes.')},
   restore(){
@@ -542,7 +569,7 @@ const acts={
     catch(e){toast('Backup inválido')}
   }
 };
-document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(t&&acts[t.dataset.act])acts[t.dataset.act](t)});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(t&&acts[t.dataset.act])acts[t.dataset.act](t,e)});
 document.addEventListener('input',e=>{
   const t=e.target;
   if(t.dataset.b){const p=cur();if(!p)return;p[t.dataset.b]=t.hasAttribute('data-n')?pn(t.value):t.value;save();if(t.hasAttribute('data-n'))updateTotals()}
