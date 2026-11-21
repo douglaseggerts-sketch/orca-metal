@@ -5,12 +5,8 @@ const RST={fazer:'A fazer',andamento:'Em andamento',emitido:'Emitido',pago:'Pago
 const RTIPOS=['ART','Laudo','Inspeção','Projeto','Outro'];
 const LST={sugerido:'A aprovar',aprovado:'Aprovada',contatado:'Mensagem enviada',respondeu:'Respondeu',proposta:'Proposta',cliente:'Cliente',descartado:'Descartada',excluido:'Não contatar'};
 const MSGN={serr:'Serralheria / estrutura',nova:'Empresa nova de estrutura',nr12:'Indústria / NR-12',icam:'Pontes rolantes / içamento',follow:'Follow-up'};
-function defMsgs(){return{
- serr:'{saud}, pessoal da {empresa}! Aqui é o Douglas, engenheiro mecânico da Promech (CREA-SC), de Joinville/Araquari.\n\nTrabalho com serralherias e caldeirarias que precisam de engenheiro só quando o cliente pede: ART de estrutura metálica, mezanino e cobertura, cálculo estrutural e desenho de fabricação. Assim vocês fecham a obra sem ter engenheiro fixo.\n\nSe aparecer algum serviço assim, posso passar um orçamento rápido? Site: promechengenharia.com.br',
- nr12:'{saud}, pessoal da {empresa}! Aqui é o Douglas, engenheiro mecânico da Promech (CREA-SC), de Joinville/Araquari.\n\nFaço laudo NR-12 de máquinas, projeto de adequação (proteções e comandos) e ART de equipamentos e estruturas. Também projeto máquinas e dispositivos sob medida.\n\nVocês têm alguma máquina, ou algum cliente, que precise de laudo ou adequação? Posso fazer uma visita sem compromisso. Site: promechengenharia.com.br',
- icam:'{saud}, pessoal da {empresa}! Aqui é o Douglas, engenheiro mecânico da Promech (CREA-SC), de Joinville/Araquari.\n\nFaço laudo e ART de pontes rolantes, talhas, pórticos e dispositivos de içamento, além de cálculo de vigas de rolamento. Posso ser o engenheiro parceiro de vocês nas instalações e inspeções dos clientes.\n\nFaz sentido conversarmos? Site: promechengenharia.com.br',
- nova:'{saud}, pessoal da {empresa}! Aqui é o Douglas, engenheiro mecânico da Promech (CREA-SC), de Joinville/Araquari.\n\nVi o trabalho de vocês com estruturas metálicas. Empresa que está começando normalmente ainda não tem engenheiro, e muitos clientes já pedem ART, cálculo ou laudo antes de fechar.\n\nPosso ser o engenheiro de vocês só quando precisar: ART da obra, cálculo da estrutura e desenhos de fabricação, com preço fixo por serviço. Assim vocês pegam obras maiores sem custo fixo.\n\nPosso te mandar os valores? Site: promechengenharia.com.br',
- follow:'Oi, tudo bem? Só retomando a mensagem sobre ART e laudos. Se tiver alguma obra ou máquina em andamento, me manda que te passo um valor no mesmo dia. Obrigado!'}}
+function defMsgs(){const t='{saud}! Sou o Douglas, engenheiro mecânico aqui da região, CREA-SC 228046-9.\n\nAtendo clientes com projetos de estruturas metálicas e mecânicos, adequações à NR-12 e laudos, todos com ART. Caso precisem de um engenheiro responsável, fico à disposição.\n\nwww.promechengenharia.com.br';return{serr:t,nova:t,nr12:t,icam:t,
+ follow:'Oi, tudo bem? Só retomando a mensagem que mandei. Se tiver alguma obra ou máquina que precise de engenheiro responsável ou ART, me chama que passo o valor no mesmo dia.'}}
 function seedLeads(){return (window.LEADS_SEED||[]).map(r=>({id:uid(),empresa:r[0],cidade:r[1],fone:r[2],seg:r[3],motivo:r[4],msg:r[5],gid:r[6]||'',status:'sugerido',prox:'',obs:'',hist:[]}))}
 const DEF_EXCL='Metalgalvano\nPrado Caldeiraria\nDuarte Equipamentos\nGevitec';
 const norm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
@@ -79,10 +75,10 @@ function seed(){
     {id:uid(),propId:'',cliente:'Indústria Exemplo Ltda',tipo:'Inspeção',desc:'Vaso de pressão VP-01 (exemplo)',art:'',emissao:addDays(t,-340),vence:addDays(t,25),status:'emitido',valor:900,obs:''},
     {id:uid(),propId:'',cliente:'Metalúrgica Exemplo',tipo:'ART',desc:'Responsabilidade técnica mensal (exemplo)',art:'',emissao:'',vence:'',status:'andamento',valor:450,obs:''}
   ];
-  return syncLeads({v:1,seq:1,settings:defSettings(),catalog:catalog,proposals:[ex],records:recs,clients:[],leads:seedLeads(),msgs:defMsgs()});
+  return syncLeads({v:1,seq:1,settings:defSettings(),catalog:catalog,proposals:[ex],records:recs,clients:[],leads:seedLeads(),msgs:defMsgs(),msgsV:2});
 }
 function valid(d){return d&&Array.isArray(d.proposals)&&Array.isArray(d.records)&&Array.isArray(d.catalog)&&d.settings}
-function fix(d){d.settings=Object.assign(defSettings(),d.settings);if(!Array.isArray(d.clients))d.clients=[];if(!Array.isArray(d.leads))d.leads=seedLeads();d.msgs=Object.assign(defMsgs(),d.msgs);return syncLeads(d)}
+function fix(d){d.settings=Object.assign(defSettings(),d.settings);if(!Array.isArray(d.clients))d.clients=[];if(!Array.isArray(d.leads))d.leads=seedLeads();if(d.msgsV!==2){d.msgs=defMsgs();d.msgsV=2}d.msgs=Object.assign(defMsgs(),d.msgs);return syncLeads(d)}
 function load(){
   try{const t='__t';localStorage.setItem(t,'1');localStorage.removeItem(t)}catch(e){storageOK=false}
   try{const r=localStorage.getItem(KEY);if(r){const d=JSON.parse(r);if(valid(d))return fix(d)}}catch(e){}
