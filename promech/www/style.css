@@ -135,3 +135,4 @@ optgroup{font-style:normal}
 .sortbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;color:var(--muted);font-weight:600}
 .chip.sm{min-height:34px;padding:5px 12px;font-size:13px}
 .km{color:var(--accent);font-weight:700}
+.tiposel{flex:1;min-height:38px;border:1px solid var(--line);border-radius:8px;padding:4px 10px;background:var(--surface);color:var(--ink);font:inherit;font-size:15px}
