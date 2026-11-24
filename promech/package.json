@@ -1,6 +1,6 @@
 {
   "name": "promech",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "private": true,
   "description": "Propostas e controle de ARTs e laudos da Promech Engenharia Mecânica",
   "dependencies": {

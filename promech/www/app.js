@@ -4,11 +4,13 @@ const PST={rascunho:'Rascunho',enviada:'Enviada',aprovada:'Aprovada',recusada:'R
 const RST={fazer:'A fazer',andamento:'Em andamento',emitido:'Emitido',pago:'Pago'};
 const RTIPOS=['ART','Laudo','Inspeção','Projeto','Outro'];
 const LST={sugerido:'A aprovar',aprovado:'Aprovada',contatado:'Mensagem enviada',respondeu:'Respondeu',proposta:'Proposta',cliente:'Cliente',descartado:'Descartada',excluido:'Não contatar'};
-const MSGN={serr:'Serralheria / estrutura',nova:'Empresa nova de estrutura',nr13:'Compressores / NR-13',padaria:'Padaria / NR-12',pmoc:'PMOC ar-condicionado',evento:'Eventos / estruturas',nr12:'Indústria / NR-12',icam:'Pontes rolantes / içamento',follow:'Follow-up'};
+const MSGN={serr:'Serralheria / estrutura',nova:'Empresa nova de estrutura',nr13:'Compressores / NR-13',padaria:'Padaria / NR-12',pmoc:'PMOC ar-condicionado',evento:'Eventos / estruturas',gas:'Gás (central e rede)',cond:'Condomínios',nr12:'Indústria / NR-12',icam:'Pontes rolantes / içamento',follow:'Follow-up'};
 function defMsgs(){const t='{saud}! Sou o Douglas, engenheiro mecânico aqui da região, CREA-SC 228046-9.\n\nAtendo clientes com projetos de estruturas metálicas e mecânicos, adequações à NR-12 e laudos, todos com ART. Caso precisem de um engenheiro responsável, fico à disposição.\n\nwww.promechengenharia.com.br';const h='{saud}! Sou o Douglas, engenheiro mecânico aqui da região, CREA-SC 228046-9.\n\n',f='\n\nwww.promechengenharia.com.br';return{serr:t,nova:t,nr12:t,icam:t,
  nr13:h+'Faço a inspeção NR-13 de compressores de ar e vasos de pressão, com prontuário e ART, que é obrigatória e cobrada na fiscalização. Também faço laudo NR-12 de máquinas e elevadores automotivos. Caso precisem, fico à disposição.'+f,
  padaria:h+'Faço laudo NR-12 de cilindros, amassadeiras, fatiadores e demais máquinas de padaria, com ART e as adequações necessárias. São itens muito cobrados na fiscalização. Caso precisem, fico à disposição.'+f,
  pmoc:h+'Faço o PMOC (Plano de Manutenção, Operação e Controle) do ar-condicionado com ART, obrigatório por lei para locais climatizados. Caso precisem de um responsável técnico, fico à disposição.'+f,
+ gas:h+'Faço projeto e ART de central de gás (GLP), rede de gás e tubulação, e laudo de estanqueidade, que os bombeiros cobram na vistoria. Também atendo PMOC do ar-condicionado e exaustão de cozinha. Caso precisem, fico à disposição.'+f,
+ cond:h+'Atendo condomínios com PMOC do ar-condicionado, projeto e laudo da central e da rede de gás, e laudos de equipamentos, sempre com ART. Caso precisem para os condomínios que vocês administram, fico à disposição.'+f,
  evento:h+'Faço ART e cálculo de palcos, box truss, arquibancadas e estruturas para eventos, que a prefeitura e os bombeiros exigem para liberar o evento. Caso precisem, fico à disposição.'+f,
  follow:'Oi, tudo bem? Só retomando a mensagem que mandei. Se tiver alguma obra ou máquina que precise de engenheiro responsável ou ART, me chama que passo o valor no mesmo dia.'}}
 function seedLeads(){return (window.LEADS_SEED||[]).map(r=>({id:uid(),empresa:r[0],cidade:r[1],fone:r[2],seg:r[3],motivo:r[4],msg:r[5],gid:r[6]||'',status:'sugerido',prox:'',obs:'',hist:[]}))}
@@ -17,11 +19,11 @@ const norm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLo
 function exclTerms(){return String(db.settings.excl||'').split('\n').map(norm).filter(Boolean)}
 function isExcl(nome){const n=norm(nome);return exclTerms().some(t=>n.indexOf(t)>=0||t.indexOf(n)>=0&&n.length>3)}
 function socialLink(l){return 'https://www.google.com/search?q='+encodeURIComponent('"'+l.empresa+'" '+(l.cidade||'')+' instagram OR facebook')}
-const TIPOS=[['todos','Todos'],['estr','Estruturas'],['maq','Máquinas e indústria'],['icam','Içamento'],['nr13','Oficinas e marcenarias'],['pad','Padarias'],['pmoc','PMOC'],['evt','Eventos']];
+const TIPOS=[['todos','Todos'],['estr','Estruturas'],['maq','Máquinas e indústria'],['icam','Içamento'],['nr13','Oficinas e marcenarias'],['pad','Padarias'],['pmoc','PMOC'],['gas','Gás e restaurantes'],['cond','Condomínios'],['evt','Eventos']];
 function tipoDe(l){const s=norm(l.seg);
   if(/serralheria|estrutura|caldeiraria|mezanino|montagem|empresa nova|facebook/.test(s))return 'estr';
   if(/maquina|industria|manutencao/.test(s))return 'maq';if(/icamento/.test(s))return 'icam';
-  if(/oficina|marcenaria/.test(s))return 'nr13';if(/padaria/.test(s))return 'pad';if(/academia|clinica|condominio|escola|hotel/.test(s))return 'pmoc';if(/evento/.test(s))return 'evt';return 'outros'}
+  if(/oficina|marcenaria/.test(s))return 'nr13';if(/padaria/.test(s))return 'pad';if(/condominio/.test(s))return 'cond';if(/gas|restaurante/.test(s))return 'gas';if(/academia|clinica|escola|hotel/.test(s))return 'pmoc';if(/evento/.test(s))return 'evt';return 'outros'}
 let ltipo='todos';
 const HOME=[-26.4234507,-48.7521387];
 function geo(l){return l.gid&&window.LEADS_GEO&&LEADS_GEO[l.gid]||null}
@@ -323,7 +325,7 @@ function leadSheet(id){
   <label>Empresa<input id="ld-empresa" value="${esc(l.empresa)}" autocomplete="off"></label>
   <div class="row2"><label>Cidade<input id="ld-cidade" value="${esc(l.cidade)}"></label><label>Telefone<input id="ld-fone" inputmode="tel" value="${esc(l.fone)}"></label></div>
   <div class="row2"><label>Segmento<input id="ld-seg" value="${esc(l.seg)}"></label>
-  <label>Mensagem sugerida<select id="ld-msg">${['serr','nova','nr12','icam','nr13','padaria','pmoc','evento'].map(k=>`<option value="${k}"${l.msg===k?' selected':''}>${MSGN[k]}</option>`).join('')}</select></label></div>
+  <label>Mensagem sugerida<select id="ld-msg">${['serr','nova','nr12','icam','nr13','padaria','pmoc','evento','gas','cond'].map(k=>`<option value="${k}"${l.msg===k?' selected':''}>${MSGN[k]}</option>`).join('')}</select></label></div>
   <label>Por que procurar<input id="ld-motivo" value="${esc(l.motivo)}"></label>
   <div class="row2"><label>Situação<select id="ld-status">${Object.keys(LST).map(k=>`<option value="${k}"${l.status===k?' selected':''}>${LST[k]}</option>`).join('')}</select></label>
   <label>Retomar em<input id="ld-prox" type="date" value="${esc(l.prox)}"></label></div>
