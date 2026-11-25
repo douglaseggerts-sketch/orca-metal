@@ -70,7 +70,7 @@ button{font:inherit;cursor:pointer}
 .tot .dim{color:var(--muted)}
 .nav{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;background:var(--surface);border-top:1px solid var(--line);
   padding:6px max(16px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));z-index:5}
-.nav>div{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;width:100%;max-width:560px}
+.nav>div{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;width:100%;max-width:560px}
 .nav button{background:none;border:0;border-top:3px solid transparent;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0 4px;font-size:12px;font-weight:600;min-height:52px}
 .nav button[aria-current="true"]{color:var(--ink);border-top-color:var(--accent)}
 .nav svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
@@ -136,3 +136,9 @@ optgroup{font-style:normal}
 .chip.sm{min-height:34px;padding:5px 12px;font-size:13px}
 .km{color:var(--accent);font-weight:700}
 .tiposel{flex:1;min-height:38px;border:1px solid var(--line);border-radius:8px;padding:4px 10px;background:var(--surface);color:var(--ink);font:inherit;font-size:15px}
+.agrp{font-size:15px;margin:14px 0 4px;color:var(--steel)}
+.alist{display:flex;flex-direction:column}
+.arow{display:flex;justify-content:space-between;gap:12px;align-items:center;text-align:left;background:var(--surface);border:0;border-bottom:1px solid var(--line);padding:11px 12px;color:var(--ink);font:inherit;font-size:15px}
+.arow:first-of-type{border-top-left-radius:8px;border-top-right-radius:8px}
+.arow .mono{color:var(--accent);white-space:nowrap}
+.nav button{font-size:10.5px}

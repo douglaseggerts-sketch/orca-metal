@@ -25,6 +25,20 @@ function tipoDe(l){const s=norm(l.seg);
   if(/maquina|industria|manutencao/.test(s))return 'maq';if(/icamento/.test(s))return 'icam';
   if(/oficina|marcenaria/.test(s))return 'nr13';if(/padaria/.test(s))return 'pad';if(/condominio/.test(s))return 'cond';if(/gas|restaurante/.test(s))return 'gas';if(/academia|clinica|escola|hotel/.test(s))return 'pmoc';if(/evento/.test(s))return 'evt';return 'outros'}
 let ltipo='todos';
+let aq='',aarea='';
+function vAtrib(){
+  const A=window.ATRIB||[],areas=[...new Set(A.map(r=>r[0]))],q=norm(aq);
+  const L=A.filter(r=>(!aarea||r[0]===aarea)&&(!q||norm(r[1]+' '+r[2]).indexOf(q)>=0));
+  let html='',last='';
+  L.forEach(r=>{if(r[0]!==last){html+=`<h2 class="agrp">${esc(r[0])}</h2>`;last=r[0]}
+    html+=`<button class="arow" data-act="acopy" data-c="${esc(r[2])}"><span>${esc(r[1])}</span><b class="mono">${esc(r[2])}</b></button>`});
+  return `<div><h1>Atribuições</h1><p class="sub">CREA-SC 228046-9 · Engenheiro Mecânico · Art. 12 da Res. 218/73</p></div>
+  <div class="card form"><input id="aq" type="search" placeholder="Buscar serviço ou código (ex.: mezanino, gás, C4174)" value="${esc(aq)}" autocomplete="off">
+  <select id="aarea"><option value="">Todas as áreas (${A.length})</option>${areas.map(x=>`<option${x===aarea?' selected':''}>${esc(x)}</option>`).join('')}</select></div>
+  <p class="note">${L.length} serviço(s). Toque em um item para copiar o código e usar no SARTWeb.</p>
+  <div class="alist">${html||'<div class="empty">Nada encontrado. Esse serviço pode não estar liberado para o seu título.</div>'}</div>
+  <p class="note">Não liberados para o seu título: ergonomia, LTCAT, PPRA e trabalho em altura (engenheiro de segurança do trabalho).</p>`;
+}
 const HOME=[-26.4234507,-48.7521387];
 function geo(l){return l.gid&&window.LEADS_GEO&&LEADS_GEO[l.gid]||null}
 function dist(l){const g=geo(l);if(!g)return null;const R=6371,r=x=>x*Math.PI/180,a=r(g[0]-HOME[0]),b=r(g[1]-HOME[1]);const h=Math.sin(a/2)**2+Math.cos(r(HOME[0]))*Math.cos(r(g[0]))*Math.sin(b/2)**2;return 2*R*Math.asin(Math.sqrt(h))*1.25}
@@ -341,6 +355,7 @@ function leadSent(l,how){
   l.prox=addDays(today(),3);l.hist=l.hist||[];l.hist.push({d:today(),t:how});save();
 }
 const ICON={
+  atrib:'<svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V7z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>',
   lead:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
   prop:'<svg viewBox="0 0 24 24"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 12h6M10 16h6"/></svg>',
   ctrl:'<svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg>',
@@ -348,9 +363,9 @@ const ICON={
   cfg:'<svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>'
 };
 function render(){
-  const v=view==='pedit'?vPedit():view==='lead'?vLeads():view==='ctrl'?vCtrl():view==='cat'?vCat():view==='cfg'?vCfg():vProp();
+  const v=view==='pedit'?vPedit():view==='lead'?vLeads():view==='atrib'?vAtrib():view==='ctrl'?vCtrl():view==='cat'?vCat():view==='cfg'?vCfg():vProp();
   const tab=view==='pedit'?'prop':view;
-  const nav=[['prop','Propostas'],['lead','Prospecção'],['ctrl','Controle'],['cat','Catálogo'],['cfg','Ajustes']].map(a=>`<button data-act="tab" data-v="${a[0]}"${tab===a[0]?' aria-current="true"':''}>${ICON[a[0]]}${a[1]}</button>`).join('');
+  const nav=[['prop','Propostas'],['lead','Prospecção'],['ctrl','Controle'],['atrib','Atribuições'],['cat','Catálogo'],['cfg','Ajustes']].map(a=>`<button data-act="tab" data-v="${a[0]}"${tab===a[0]?' aria-current="true"':''}>${ICON[a[0]]}${a[1]}</button>`).join('');
   $('#app').innerHTML=v+`<nav class="nav"><div>${nav}</div></nav>`;
   if(view==='pedit')updateTotals();
 }
@@ -519,6 +534,7 @@ const acts={
     save();toast(n+(n===1?' serviço enviado':' serviços enviados')+' ao Controle');render();
   },
   lfilter(t){lfilter=t.dataset.f;render()},
+  acopy(t){const c=t.dataset.c;try{navigator.clipboard.writeText(c).then(()=>toast('Código '+c+' copiado'),()=>toast(c))}catch(e){toast(c)}},
   lsort(t){lsort=t.dataset.s;render()},
   lraio(t){db.settings.raio=+t.dataset.r;save();render()},
   slink(t,e){const l=db.leads.find(x=>x.id===t.dataset.id);if(e)e.preventDefault();openExt(socialLink(l))},
@@ -596,6 +612,8 @@ document.addEventListener('input',e=>{
   const t=e.target;
   if(t.dataset.b){const p=cur();if(!p)return;p[t.dataset.b]=t.hasAttribute('data-n')?pn(t.value):t.value;save();if(t.hasAttribute('data-n'))updateTotals()}
   else if(t.id==='ltipo'){ltipo=t.value;render()}
+  else if(t.id==='aarea'){aarea=t.value;render()}
+  else if(t.id==='aq'){aq=t.value;const pos=t.selectionStart;render();const n=$('#aq');if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}
   else if(t.dataset.m){db.msgs[t.dataset.m]=t.value;save()}
   else if(t.dataset.s){db.settings[t.dataset.s]=t.hasAttribute('data-n')?pn(t.value):t.value;save()}
 });
