@@ -128,6 +128,11 @@
   .cot .tk2 { font-weight: 800; font-size: 17px; padding: 2px 8px; margin-left: -8px; border-radius: 6px; letter-spacing: .3px; }
   .cot .nm { color: var(--sub); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; margin-top: 2px; }
   .cot .c4 { grid-column: 1 / -1; flex-direction: row; align-items: center; font-size: 11.5px; color: var(--sub); margin-top: 4px; }
+  .cot .c5 { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 8px; font-size: 11.5px; color: var(--sub); margin-top: 5px; }
+  .cot .c5 b { font-size: 11.5px; color: var(--txt); font-weight: 600; }
+  .cot .c5 .fx { flex: 1; position: relative; height: 4px; border-radius: 2px; background: var(--linha); }
+  .cot .c5 .fx i { position: absolute; top: -3px; width: 10px; height: 10px; border-radius: 50%; margin-left: -5px; }
+  body.dividida .cot .c5, body.dividida .cot .c5 b { font-size: 10px; margin-top: 2px; }
   .grade-ind { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
   .ind { background: var(--card2); border: 1px solid var(--linha); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .ind .sub { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -409,7 +414,7 @@ function interpretar(txt, sym) {
     pts.push({ t: ts[i], c: c[i], o: ab, h: hi[i] != null ? hi[i] : Math.max(ab, c[i]), l: lo[i] != null ? lo[i] : Math.min(ab, c[i]), v: vol[i] || 0 });
   }
   const m = r.meta;
-  return { pts, preco: m.regularMarketPrice, moeda: ehIndice(sym || m.symbol || '') || m.instrumentType === 'INDEX' ? 'PTS' : m.currency || 'BRL', nome: m.shortName || m.longName || '', hora: m.regularMarketTime || null, volume: m.regularMarketVolume || null };
+  return { pts, preco: m.regularMarketPrice, moeda: ehIndice(sym || m.symbol || '') || m.instrumentType === 'INDEX' ? 'PTS' : m.currency || 'BRL', nome: m.shortName || m.longName || '', hora: m.regularMarketTime || null, volume: m.regularMarketVolume || null, max: m.regularMarketDayHigh != null ? m.regularMarketDayHigh : null, min: m.regularMarketDayLow != null ? m.regularMarketDayLow : null };
 }
 async function buscarCotacao(sym) {
   const txt = await chamar('fetch', URL_Y + encodeURIComponent(sym) + '?range=5d&interval=1d');
@@ -431,6 +436,12 @@ async function buscarCotacao(sym) {
   }
   const q = { preco: d.preco, moeda: d.moeda, nome: d.nome, var: anterior ? (d.preco / anterior - 1) * 100 : null, hora: d.hora,
     volume: d.volume != null ? d.volume : (p.length ? p[p.length - 1].v : null) };
+  // mínima e máxima do dia: do Yahoo; se faltar, da barra do dia do último negócio
+  const barraHoje = d.hora && p.length && diaBR(p[p.length - 1].t + 3 * 3600) === diaBR(d.hora) ? p[p.length - 1] : null;
+  q.max = d.max != null ? d.max : barraHoje ? barraHoje.h : null;
+  q.min = d.min != null ? d.min : barraHoje ? barraHoje.l : null;
+  if (q.max != null && d.preco > q.max) q.max = d.preco;
+  if (q.min != null && d.preco < q.min) q.min = d.preco;
   cotacoes[sym] = q;
   return q;
 }
@@ -591,8 +602,14 @@ function linhaAcao(s) {
       <span class="nm">${q.nome ? esc(q.nome) : q.erro ? 'sem dados' : '…'}</span></div>
     <div class="c2"><b>${p != null ? num(p) : '—'}</b><span class="nm">${horaCot(q)}</span></div>
     <div class="c3"><b style="color:${cor}">${q.var != null ? pct(q.var) : ''}</b><span class="nm">${abrev(volFin(s))}</span></div>
+    ${q.min != null && q.max != null && p != null ? faixaDia(q.min, q.max, p, cor) : ''}
     ${compra ? `<div class="c4"><span class="tag" style="background:var(--compraBg);color:var(--alta);border-color:var(--alta);margin:0">COMPRA ≤ ${num(it.alvo)}</span></div>` : ''}
   </div>`;
+}
+// mínima e máxima do dia, com a posição do preço atual entre elas
+function faixaDia(mn, mx, p, cor) {
+  const pos = mx > mn ? Math.min(100, Math.max(0, (p - mn) / (mx - mn) * 100)) : 50;
+  return `<div class="c5"><span>Mín <b>${num(mn)}</b></span><i class="fx"><i style="left:${pos.toFixed(1)}%;background:${cor}"></i></i><span>Máx <b>${num(mx)}</b></span></div>`;
 }
 // tocar e segurar (ou botão direito no PC) abre as opções da ação
 function ligarSegurar() {
