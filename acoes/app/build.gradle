@@ -10,8 +10,8 @@ android {
         applicationId 'br.com.monitoracoes'
         minSdk 26
         targetSdk 34
-        versionCode 26
-        versionName '1.25'
+        versionCode 30
+        versionName '1.27'
     }
 
     signingConfigs {
